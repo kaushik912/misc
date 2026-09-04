@@ -1,0 +1,248 @@
+:root {
+  --bg: #f7f7f9;
+  --card: #ffffff;
+  --border: #e4e4e9;
+  --text: #1c1c22;
+  --text-muted: #6b6b76;
+  --accent: #2f6fed;
+  --accent-hover: #2559c4;
+  --danger: #e5484d;
+  --danger-hover: #c8383c;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  max-width: 640px;
+  margin: auto;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 4px 0 16px;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 20px 0 8px;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  padding: 12px 14px;
+  margin: 5px 0;
+  font-size: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+#appSection,
+#loginSection {
+  margin-top: 20px;
+}
+
+#loginSection {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* Expense list: cards, not a bordered grid table */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  margin-top: 8px;
+}
+
+thead {
+  display: none;
+}
+
+tbody tr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+td {
+  padding: 12px;
+  border: none;
+}
+
+tbody tr td:nth-child(1) {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  width: 100%;
+  padding-bottom: 0;
+}
+
+tbody tr td:nth-child(2) {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+tbody tr td:nth-child(3) {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+tbody tr td:last-child {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  padding-top: 0;
+}
+
+.totals {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.totals h4 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.totals span {
+  color: var(--text);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.filter-controls {
+  margin: 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.month-nav-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.3rem;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+.month-label {
+  font-weight: 600;
+  font-size: 1.05rem;
+  min-width: 140px;
+  text-align: center;
+}
+
+.add-btn {
+  margin-top: 8px;
+}
+
+.edit-btn, .delete-btn {
+  padding: 8px 0;
+  cursor: pointer;
+  border-radius: 8px;
+  width: auto;
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.edit-btn {
+  background: #eef2ff;
+  color: var(--accent);
+}
+
+.edit-btn:hover {
+  background: #dde5ff;
+}
+
+.delete-btn {
+  background: #fdeceb;
+  color: var(--danger);
+}
+
+.delete-btn:hover {
+  background: #fbdbd9;
+}
+
+.user-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.user-controls button {
+  width: auto;
+  flex: 1;
+  font-size: 0.9rem;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.user-controls button:hover {
+  background: #f0f0f3;
+}
+
+.modal {
+  display: block;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.modal-content {
+  background-color: white;
+  margin: 15% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%;
+  max-width: 500px;
+}

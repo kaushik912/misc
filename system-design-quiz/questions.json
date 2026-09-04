@@ -1,0 +1,142 @@
+[
+  {
+    "id": "load-balancing",
+    "tag": "Load Balancing",
+    "scenario": "Your API fleet has 6 servers. One handles a slow reporting endpoint that ties up connections for 30s at a time, while the other 5 only serve quick reads. Traffic is currently split with round-robin, and that one server keeps queueing requests.",
+    "question": "Which load balancing strategy would relieve the overloaded server without any application changes?",
+    "options": [
+      "Switch to least-connections balancing",
+      "Add a longer TCP keep-alive timeout",
+      "Increase the round-robin weight of the slow server",
+      "Move to client-side DNS round-robin"
+    ],
+    "correctIndex": 0,
+    "explanation": "Least-connections routes each new request to the server with the fewest in-flight connections. Round-robin just alternates blindly, so a server stuck on long-running requests keeps getting the same share of new traffic anyway. Least-connections naturally shifts load away from busy nodes without touching the app."
+  },
+  {
+    "id": "cache-aside",
+    "tag": "Caching",
+    "scenario": "You add a Redis cache in front of a Postgres table for user profiles. On a cache miss, the app reads from Postgres and writes the result to Redis. A user updates their profile, and for the next 5 minutes other users still see the old name.",
+    "question": "What's the most likely cause, and the standard fix?",
+    "options": [
+      "Redis is down; fix by adding a Redis replica",
+      "The cache entry wasn't invalidated on write; fix by deleting/updating the key on writes (or using a short TTL as a backstop)",
+      "Postgres replication lag; fix by reading from the primary",
+      "The load balancer is sticky to a stale app instance; fix by disabling sticky sessions"
+    ],
+    "correctIndex": 1,
+    "explanation": "This is classic cache-aside: reads populate the cache, but if writes don't also invalidate or update that key, the cache just serves the old value until it expires. The fix is to actively invalidate (or update) the cache entry on every write, with a TTL as a safety net for anything missed."
+  },
+  {
+    "id": "cap-theorem",
+    "tag": "CAP Theorem",
+    "scenario": "During a network partition between two data centers, your distributed key-value store keeps accepting both reads and writes in each data center independently, and the values can disagree until the partition heals.",
+    "question": "Which CAP trade-off is this system making during the partition?",
+    "options": [
+      "Consistency and Partition tolerance (CP) — it rejects requests until healed",
+      "Availability and Partition tolerance (AP) — it stays up but may return stale/conflicting data",
+      "Consistency and Availability (CA) — partitions don't affect it",
+      "None of these apply; CAP only concerns single-node failures"
+    ],
+    "correctIndex": 1,
+    "explanation": "CAP theorem says that under a network partition (P, which you can't opt out of in a distributed system), you choose between Consistency and Availability. Here both sides keep serving requests (available) at the cost of potentially divergent data (not consistent) — that's the AP choice, same as DynamoDB or Cassandra's default mode."
+  },
+  {
+    "id": "sharding",
+    "tag": "Database Sharding",
+    "scenario": "A single Postgres instance for your orders table has grown to 4TB and write throughput is maxed out. You decide to shard the table across 8 database nodes, keyed by customer_id.",
+    "question": "What's the biggest new problem this introduces that a single database never had?",
+    "options": [
+      "Queries that need to join or aggregate across multiple customers now require scatter-gather across shards",
+      "Postgres can no longer use indexes",
+      "Writes become slower per-row than on a single instance",
+      "You lose the ability to use SQL entirely"
+    ],
+    "correctIndex": 0,
+    "explanation": "Sharding by customer_id makes single-customer queries fast (they hit one shard), but any cross-customer query — 'total revenue this month' — now has to fan out to every shard and merge results in the application. That scatter-gather complexity is the classic cost of sharding, not indexing or SQL support."
+  },
+  {
+    "id": "message-queue",
+    "tag": "Async Messaging",
+    "scenario": "Your checkout API currently calls the email service, the inventory service, and the analytics service synchronously before responding. A slowdown in the analytics service now makes checkout itself slow, even though analytics isn't critical to completing an order.",
+    "question": "What's the standard fix for this coupling?",
+    "options": [
+      "Add retries with exponential backoff on the synchronous call",
+      "Publish an 'order placed' event to a queue/broker and let each downstream service consume it asynchronously",
+      "Increase the timeout on the analytics call",
+      "Move the analytics service to faster hardware"
+    ],
+    "correctIndex": 1,
+    "explanation": "Putting a message queue between checkout and the downstream services decouples them: checkout publishes an event and returns immediately, while email/inventory/analytics consume it at their own pace. A slow or even temporarily-down consumer no longer blocks the critical path. Retries/timeouts only mask the coupling, they don't remove it."
+  },
+  {
+    "id": "rate-limiting",
+    "tag": "Rate Limiting",
+    "scenario": "You need to allow bursts of up to 100 requests/second from a client, but enforce a sustained average of 10 requests/second over time, without hard-cutting a client the instant they briefly spike.",
+    "question": "Which algorithm fits this requirement best?",
+    "options": [
+      "Fixed window counter",
+      "Token bucket",
+      "Simple per-second hard cap",
+      "Least-recently-used (LRU) eviction"
+    ],
+    "correctIndex": 1,
+    "explanation": "Token bucket fills tokens at a steady average rate (10/s) but lets a client spend a burst of accumulated tokens all at once (up to the bucket size, e.g. 100), matching exactly this 'burst allowed, average enforced' shape. Fixed window counters have edge-of-window burst bugs and don't smooth a sustained rate the same way."
+  },
+  {
+    "id": "cdn",
+    "tag": "CDN",
+    "scenario": "Your product images are served from a single origin server in us-east-1. Users in Singapore report slow image loads, while US users see no issue. The images rarely change once uploaded.",
+    "question": "What's the most effective fix?",
+    "options": [
+      "Compress the images further on the origin server",
+      "Put a CDN in front of the origin so images are cached at edge locations near users",
+      "Increase the origin server's instance size",
+      "Add a second origin server in us-east-1 for redundancy"
+    ],
+    "correctIndex": 1,
+    "explanation": "The problem is physical distance/latency, not origin capacity or file size. A CDN caches static, rarely-changing assets at edge nodes close to users worldwide, so a Singapore user fetches from a nearby edge instead of round-tripping to us-east-1."
+  },
+  {
+    "id": "consistent-hashing",
+    "tag": "Consistent Hashing",
+    "scenario": "You run a cache cluster of 10 nodes using plain modulo hashing (key hash % 10) to decide which node owns a key. You need to add an 11th node to handle more load.",
+    "question": "What happens, and how does consistent hashing avoid it?",
+    "options": [
+      "Nothing changes; modulo hashing scales node count for free",
+      "Almost every key's owning node changes (mass cache miss/reshuffle); consistent hashing remaps only ~1/N of keys when a node is added",
+      "Consistent hashing prevents you from ever adding nodes",
+      "Modulo hashing and consistent hashing behave identically here"
+    ],
+    "correctIndex": 1,
+    "explanation": "With key hash % N, changing N from 10 to 11 changes the modulo result for nearly every key, causing a massive cache miss storm as everything remaps. Consistent hashing places nodes and keys on a hash ring so adding a node only takes over the keys in its adjacent ring segment — roughly 1/N of keys move, not nearly all of them."
+  },
+  {
+    "id": "replication-lag",
+    "tag": "Database Replication",
+    "scenario": "You added read replicas to scale read traffic. A user submits a form, gets redirected to a confirmation page that reads from a replica, and briefly sees their own submission as missing before it reappears on refresh.",
+    "question": "What's happening, and what's a common fix?",
+    "options": [
+      "The write silently failed; fix by adding write retries",
+      "Replication lag — the replica hasn't caught up yet; fix by reading your own recent write from the primary (or a replica known to be caught up)",
+      "The CDN cached an old version of the page",
+      "This is a load balancer routing bug, unrelated to replication"
+    ],
+    "correctIndex": 1,
+    "explanation": "Read replicas apply writes asynchronously, so there's a small window where a replica is behind the primary — a classic 'read-your-own-write' consistency gap. A common fix is routing the immediate post-write read to the primary (or tracking replica lag and choosing an up-to-date replica) instead of always reading from any replica."
+  },
+  {
+    "id": "idempotency",
+    "tag": "Idempotency",
+    "scenario": "A mobile client submits a 'charge card' request, but the response times out on a flaky connection. The client's retry logic resends the exact same charge request. The payment API must not double-charge the customer.",
+    "question": "What's the standard way to make this retry-safe?",
+    "options": [
+      "Have the client wait longer before timing out",
+      "Require an idempotency key on the request, and have the server return the original result for any repeat with the same key instead of processing it again",
+      "Disable client-side retries entirely",
+      "Add a distributed lock on the customer's account for all requests"
+    ],
+    "correctIndex": 1,
+    "explanation": "An idempotency key (generated once by the client, sent on every retry) lets the server recognize 'I've already processed this exact request' and return the stored result instead of charging again. This is how Stripe and similar payment APIs make retries safe without banning retries or locking the whole account."
+  }
+]

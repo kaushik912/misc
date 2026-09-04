@@ -1,0 +1,58 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.0'
+    id 'io.spring.dependency-management' version '1.1.5'
+    id 'com.diffplug.spotless' version "6.25.0"
+}
+
+group = 'com.testcontainers'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+        vendor = JvmVendorSpec.ADOPTIUM
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('testcontainers.version', "1.19.8")
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    runtimeOnly 'org.postgresql:postgresql'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events = ["PASSED", "FAILED", "SKIPPED"]
+        showStandardStreams = true
+        exceptionFormat = "full"
+    }
+}
+
+spotless {
+    java {
+        importOrder()
+        removeUnusedImports()
+        prettier(['prettier': '3.0.3', 'prettier-plugin-java': '2.3.0'])
+            .config([
+                'parser': 'java',
+                'tabWidth': 2,
+                'printWidth': 80,
+                'plugins': ['prettier-plugin-java']
+            ])
+        formatAnnotations()
+    }
+}

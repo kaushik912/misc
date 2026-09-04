@@ -1,0 +1,540 @@
+<title>Systems Under Load</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg:#eef1f6;
+    --surface:#ffffff;
+    --surface-2:#f5f7fb;
+    --ink:#1a2233;
+    --muted:#5b6478;
+    --line:#dbe0ea;
+    --accent:#1c7a72;
+    --accent-ink:#0d443f;
+    --accent-soft:#e3f3f1;
+    --good:#278a45;
+    --good-soft:#e5f6ea;
+    --bad:#c0392f;
+    --bad-soft:#fbe9e7;
+    --warn:#b5790a;
+    --shadow: 0 1px 2px rgba(23,32,50,.06), 0 8px 24px -12px rgba(23,32,50,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d121c;
+      --surface:#161d2b;
+      --surface-2:#1c2436;
+      --ink:#e9edf5;
+      --muted:#8c96ab;
+      --line:#2b3448;
+      --accent:#54d6c9;
+      --accent-ink:#c7f5ee;
+      --accent-soft:#173330;
+      --good:#5fd97a;
+      --good-soft:#173424;
+      --bad:#ff6b60;
+      --bad-soft:#3a1c1c;
+      --warn:#f0b862;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d121c;
+    --surface:#161d2b;
+    --surface-2:#1c2436;
+    --ink:#e9edf5;
+    --muted:#8c96ab;
+    --line:#2b3448;
+    --accent:#54d6c9;
+    --accent-ink:#c7f5ee;
+    --accent-soft:#173330;
+    --good:#5fd97a;
+    --good-soft:#173424;
+    --bad:#ff6b60;
+    --bad-soft:#3a1c1c;
+    --warn:#f0b862;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:32px 16px 64px;
+  }
+  .app{ width:100%; max-width:640px; }
+
+  .masthead{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:20px;
+  }
+  .wordmark{
+    font-family:'Sora', ui-sans-serif, sans-serif;
+    font-weight:800;
+    font-size:1.15rem;
+    letter-spacing:-0.01em;
+  }
+  .wordmark span{ color:var(--accent); }
+  .subhead{
+    font-size:.8rem;
+    color:var(--muted);
+    margin-top:2px;
+  }
+
+  .statbar{
+    display:flex;
+    gap:10px;
+  }
+  .chip{
+    font-family:'IBM Plex Mono', ui-monospace, monospace;
+    font-size:.72rem;
+    font-weight:600;
+    letter-spacing:.03em;
+    color:var(--muted);
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:5px 11px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    white-space:nowrap;
+  }
+  .chip b{ color:var(--ink); font-weight:600; }
+  .chip.score b{ color:var(--accent-ink); }
+
+  /* progress track */
+  .track{
+    display:flex;
+    align-items:center;
+    margin:0 0 22px;
+    padding:14px 16px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    overflow-x:auto;
+  }
+  .node-row{ display:flex; align-items:center; flex:1; min-width:0; }
+  .node{
+    width:22px; height:22px; min-width:22px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    background:var(--surface);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:.62rem;
+    font-weight:600;
+    color:var(--muted);
+    transition:all .25s ease;
+  }
+  .node.current{ border-color:var(--accent); color:var(--accent-ink); box-shadow:0 0 0 4px var(--accent-soft); }
+  .node.correct{ border-color:var(--good); background:var(--good); color:#fff; }
+  .node.incorrect{ border-color:var(--bad); background:var(--bad); color:#fff; }
+  .wire{
+    flex:1;
+    height:2px;
+    background:var(--line);
+    min-width:8px;
+  }
+  .wire.done{ background:var(--accent); }
+
+  /* card */
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:var(--shadow);
+    padding:26px 26px 24px;
+  }
+  .tag{
+    display:inline-block;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:.68rem;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--accent-ink);
+    background:var(--accent-soft);
+    border-radius:6px;
+    padding:4px 9px;
+    margin-bottom:14px;
+  }
+  .scenario{
+    font-size:.95rem;
+    line-height:1.6;
+    color:var(--muted);
+    padding-left:14px;
+    border-left:3px solid var(--line);
+    margin-bottom:18px;
+  }
+  .question{
+    font-family:'Sora', sans-serif;
+    font-weight:700;
+    font-size:1.15rem;
+    line-height:1.45;
+    text-wrap:balance;
+    margin-bottom:18px;
+  }
+
+  .options{ display:flex; flex-direction:column; gap:10px; }
+  .option{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    width:100%;
+    text-align:left;
+    background:var(--surface-2);
+    border:1.5px solid var(--line);
+    border-radius:12px;
+    padding:12px 14px;
+    font-family:inherit;
+    font-size:.92rem;
+    color:var(--ink);
+    cursor:pointer;
+    transition:border-color .15s ease, transform .1s ease, background .15s ease;
+  }
+  .option:hover:not(:disabled){ border-color:var(--accent); }
+  .option:active:not(:disabled){ transform:scale(.997); }
+  .option:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .option:disabled{ cursor:default; }
+
+  .letter{
+    width:26px; height:26px; min-width:26px;
+    border-radius:50%;
+    background:var(--surface);
+    border:1.5px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:.78rem;
+    color:var(--muted);
+  }
+  .option-text{ flex:1; line-height:1.4; }
+  .mark{ font-size:1.05rem; font-weight:700; min-width:18px; text-align:center; }
+
+  .option.is-correct{ border-color:var(--good); background:var(--good-soft); }
+  .option.is-correct .letter{ border-color:var(--good); background:var(--good); color:#fff; }
+  .option.is-correct .mark{ color:var(--good); }
+
+  .option.is-wrong{ border-color:var(--bad); background:var(--bad-soft); }
+  .option.is-wrong .letter{ border-color:var(--bad); background:var(--bad); color:#fff; }
+  .option.is-wrong .mark{ color:var(--bad); }
+
+  .explain{
+    margin-top:18px;
+    padding:16px 16px 15px;
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    border-radius:12px;
+    animation:rise .25s ease;
+  }
+  @keyframes rise{ from{ opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .explain-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:.68rem;
+    font-weight:600;
+    letter-spacing:.1em;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .explain.right .explain-label{ color:var(--good); }
+  .explain.wrong .explain-label{ color:var(--bad); }
+  .explain p{ margin:0; font-size:.9rem; line-height:1.6; color:var(--ink); }
+
+  .actions{ display:flex; justify-content:flex-end; margin-top:20px; }
+  .btn{
+    font-family:'IBM Plex Sans', sans-serif;
+    font-weight:600;
+    font-size:.9rem;
+    color:#fff;
+    background:var(--accent);
+    border:none;
+    border-radius:10px;
+    padding:11px 20px;
+    cursor:pointer;
+    transition:filter .15s ease, transform .1s ease;
+  }
+  .btn:hover{ filter:brightness(1.08); }
+  .btn:active{ transform:scale(.98); }
+  .btn:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  .btn.ghost{
+    background:transparent;
+    color:var(--accent-ink);
+    border:1.5px solid var(--accent);
+  }
+
+  /* results */
+  .results-score{
+    font-family:'Sora', sans-serif;
+    font-weight:800;
+    font-size:3rem;
+    line-height:1;
+    letter-spacing:-0.02em;
+  }
+  .results-score span{ font-size:1.4rem; color:var(--muted); font-weight:600; }
+  .results-line{ color:var(--muted); font-size:.9rem; margin-top:6px; margin-bottom:20px; }
+  .breakdown{ display:flex; flex-direction:column; gap:8px; margin-bottom:22px; }
+  .brow{
+    display:flex; align-items:center; gap:10px;
+    font-size:.86rem;
+    padding:9px 12px;
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    border-radius:10px;
+  }
+  .brow .mark{ font-size:.95rem; }
+  .brow .tagname{ font-family:'IBM Plex Mono', monospace; font-size:.75rem; color:var(--muted); flex:1; }
+
+  @media (prefers-reduced-motion: reduce){
+    .explain{ animation:none; }
+    .option, .btn{ transition:none; }
+  }
+
+  @media (max-width:420px){
+    .card{ padding:20px 18px; }
+    .question{ font-size:1.05rem; }
+  }
+</style>
+
+<div class="app">
+  <div class="masthead">
+    <div>
+      <div class="wordmark">Systems <span>Under Load</span></div>
+      <div class="subhead">A scenario-driven system design quiz</div>
+    </div>
+    <div class="statbar">
+      <div class="chip score" id="scoreChip">Score <b id="scoreVal">0/10</b></div>
+    </div>
+  </div>
+
+  <div class="track" id="track"></div>
+
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    "id": "load-balancing", "tag": "Load Balancing",
+    "scenario": "Your API fleet has 6 servers. One handles a slow reporting endpoint that ties up connections for 30s at a time, while the other 5 only serve quick reads. Traffic is currently split with round-robin, and that one server keeps queueing requests.",
+    "question": "Which load balancing strategy would relieve the overloaded server without any application changes?",
+    "options": ["Switch to least-connections balancing","Add a longer TCP keep-alive timeout","Increase the round-robin weight of the slow server","Move to client-side DNS round-robin"],
+    "correctIndex": 0,
+    "explanation": "Least-connections routes each new request to the server with the fewest in-flight connections. Round-robin just alternates blindly, so a server stuck on long-running requests keeps getting the same share of new traffic anyway. Least-connections naturally shifts load away from busy nodes without touching the app."
+  },
+  {
+    "id": "cache-aside", "tag": "Caching",
+    "scenario": "You add a Redis cache in front of a Postgres table for user profiles. On a cache miss, the app reads from Postgres and writes the result to Redis. A user updates their profile, and for the next 5 minutes other users still see the old name.",
+    "question": "What's the most likely cause, and the standard fix?",
+    "options": ["Redis is down; fix by adding a Redis replica","The cache entry wasn't invalidated on write; fix by deleting/updating the key on writes (or using a short TTL as a backstop)","Postgres replication lag; fix by reading from the primary","The load balancer is sticky to a stale app instance; fix by disabling sticky sessions"],
+    "correctIndex": 1,
+    "explanation": "This is classic cache-aside: reads populate the cache, but if writes don't also invalidate or update that key, the cache just serves the old value until it expires. The fix is to actively invalidate (or update) the cache entry on every write, with a TTL as a safety net for anything missed."
+  },
+  {
+    "id": "cap-theorem", "tag": "CAP Theorem",
+    "scenario": "During a network partition between two data centers, your distributed key-value store keeps accepting both reads and writes in each data center independently, and the values can disagree until the partition heals.",
+    "question": "Which CAP trade-off is this system making during the partition?",
+    "options": ["Consistency and Partition tolerance (CP) — it rejects requests until healed","Availability and Partition tolerance (AP) — it stays up but may return stale/conflicting data","Consistency and Availability (CA) — partitions don't affect it","None of these apply; CAP only concerns single-node failures"],
+    "correctIndex": 1,
+    "explanation": "CAP theorem says that under a network partition (P, which you can't opt out of in a distributed system), you choose between Consistency and Availability. Here both sides keep serving requests (available) at the cost of potentially divergent data (not consistent) — that's the AP choice, same as DynamoDB or Cassandra's default mode."
+  },
+  {
+    "id": "sharding", "tag": "Database Sharding",
+    "scenario": "A single Postgres instance for your orders table has grown to 4TB and write throughput is maxed out. You decide to shard the table across 8 database nodes, keyed by customer_id.",
+    "question": "What's the biggest new problem this introduces that a single database never had?",
+    "options": ["Queries that need to join or aggregate across multiple customers now require scatter-gather across shards","Postgres can no longer use indexes","Writes become slower per-row than on a single instance","You lose the ability to use SQL entirely"],
+    "correctIndex": 0,
+    "explanation": "Sharding by customer_id makes single-customer queries fast (they hit one shard), but any cross-customer query — 'total revenue this month' — now has to fan out to every shard and merge results in the application. That scatter-gather complexity is the classic cost of sharding, not indexing or SQL support."
+  },
+  {
+    "id": "message-queue", "tag": "Async Messaging",
+    "scenario": "Your checkout API currently calls the email service, the inventory service, and the analytics service synchronously before responding. A slowdown in the analytics service now makes checkout itself slow, even though analytics isn't critical to completing an order.",
+    "question": "What's the standard fix for this coupling?",
+    "options": ["Add retries with exponential backoff on the synchronous call","Publish an 'order placed' event to a queue/broker and let each downstream service consume it asynchronously","Increase the timeout on the analytics call","Move the analytics service to faster hardware"],
+    "correctIndex": 1,
+    "explanation": "Putting a message queue between checkout and the downstream services decouples them: checkout publishes an event and returns immediately, while email/inventory/analytics consume it at their own pace. A slow or even temporarily-down consumer no longer blocks the critical path. Retries/timeouts only mask the coupling, they don't remove it."
+  },
+  {
+    "id": "rate-limiting", "tag": "Rate Limiting",
+    "scenario": "You need to allow bursts of up to 100 requests/second from a client, but enforce a sustained average of 10 requests/second over time, without hard-cutting a client the instant they briefly spike.",
+    "question": "Which algorithm fits this requirement best?",
+    "options": ["Fixed window counter","Token bucket","Simple per-second hard cap","Least-recently-used (LRU) eviction"],
+    "correctIndex": 1,
+    "explanation": "Token bucket fills tokens at a steady average rate (10/s) but lets a client spend a burst of accumulated tokens all at once (up to the bucket size, e.g. 100), matching exactly this 'burst allowed, average enforced' shape. Fixed window counters have edge-of-window burst bugs and don't smooth a sustained rate the same way."
+  },
+  {
+    "id": "cdn", "tag": "CDN",
+    "scenario": "Your product images are served from a single origin server in us-east-1. Users in Singapore report slow image loads, while US users see no issue. The images rarely change once uploaded.",
+    "question": "What's the most effective fix?",
+    "options": ["Compress the images further on the origin server","Put a CDN in front of the origin so images are cached at edge locations near users","Increase the origin server's instance size","Add a second origin server in us-east-1 for redundancy"],
+    "correctIndex": 1,
+    "explanation": "The problem is physical distance/latency, not origin capacity or file size. A CDN caches static, rarely-changing assets at edge nodes close to users worldwide, so a Singapore user fetches from a nearby edge instead of round-tripping to us-east-1."
+  },
+  {
+    "id": "consistent-hashing", "tag": "Consistent Hashing",
+    "scenario": "You run a cache cluster of 10 nodes using plain modulo hashing (key hash % 10) to decide which node owns a key. You need to add an 11th node to handle more load.",
+    "question": "What happens, and how does consistent hashing avoid it?",
+    "options": ["Nothing changes; modulo hashing scales node count for free","Almost every key's owning node changes (mass cache miss/reshuffle); consistent hashing remaps only ~1/N of keys when a node is added","Consistent hashing prevents you from ever adding nodes","Modulo hashing and consistent hashing behave identically here"],
+    "correctIndex": 1,
+    "explanation": "With key hash % N, changing N from 10 to 11 changes the modulo result for nearly every key, causing a massive cache miss storm as everything remaps. Consistent hashing places nodes and keys on a hash ring so adding a node only takes over the keys in its adjacent ring segment — roughly 1/N of keys move, not nearly all of them."
+  },
+  {
+    "id": "replication-lag", "tag": "DB Replication",
+    "scenario": "You added read replicas to scale read traffic. A user submits a form, gets redirected to a confirmation page that reads from a replica, and briefly sees their own submission as missing before it reappears on refresh.",
+    "question": "What's happening, and what's a common fix?",
+    "options": ["The write silently failed; fix by adding write retries","Replication lag — the replica hasn't caught up yet; fix by reading your own recent write from the primary (or a replica known to be caught up)","The CDN cached an old version of the page","This is a load balancer routing bug, unrelated to replication"],
+    "correctIndex": 1,
+    "explanation": "Read replicas apply writes asynchronously, so there's a small window where a replica is behind the primary — a classic 'read-your-own-write' consistency gap. A common fix is routing the immediate post-write read to the primary (or tracking replica lag and choosing an up-to-date replica) instead of always reading from any replica."
+  },
+  {
+    "id": "idempotency", "tag": "Idempotency",
+    "scenario": "A mobile client submits a 'charge card' request, but the response times out on a flaky connection. The client's retry logic resends the exact same charge request. The payment API must not double-charge the customer.",
+    "question": "What's the standard way to make this retry-safe?",
+    "options": ["Have the client wait longer before timing out","Require an idempotency key on the request, and have the server return the original result for any repeat with the same key instead of processing it again","Disable client-side retries entirely","Add a distributed lock on the customer's account for all requests"],
+    "correctIndex": 1,
+    "explanation": "An idempotency key (generated once by the client, sent on every retry) lets the server recognize 'I've already processed this exact request' and return the stored result instead of charging again. This is how Stripe and similar payment APIs make retries safe without banning retries or locking the whole account."
+  }
+];
+
+let idx = 0;
+let score = 0;
+let answered = new Array(QUESTIONS.length).fill(null); // null | true | false
+let locked = false;
+
+const trackEl = document.getElementById('track');
+const cardEl = document.getElementById('card');
+const scoreVal = document.getElementById('scoreVal');
+
+function renderTrack(){
+  let html = '<div class="node-row">';
+  QUESTIONS.forEach((q,i)=>{
+    let cls = 'node';
+    if (answered[i] === true) cls += ' correct';
+    else if (answered[i] === false) cls += ' incorrect';
+    else if (i === idx) cls += ' current';
+    html += `<div class="${cls}" title="${q.tag}">${i+1}</div>`;
+    if (i < QUESTIONS.length - 1){
+      const done = answered[i] !== null;
+      html += `<div class="wire${done ? ' done' : ''}"></div>`;
+    }
+  });
+  html += '</div>';
+  trackEl.innerHTML = html;
+}
+
+function renderScore(){
+  scoreVal.textContent = `${score}/${QUESTIONS.length}`;
+}
+
+function renderQuestion(){
+  locked = false;
+  const q = QUESTIONS[idx];
+  let optsHtml = '';
+  q.options.forEach((opt,i)=>{
+    const letter = String.fromCharCode(65+i);
+    optsHtml += `<button class="option" data-i="${i}">
+      <span class="letter">${letter}</span>
+      <span class="option-text">${opt}</span>
+      <span class="mark"></span>
+    </button>`;
+  });
+
+  cardEl.innerHTML = `
+    <div class="tag">${q.tag}</div>
+    <div class="scenario">${q.scenario}</div>
+    <div class="question">${q.question}</div>
+    <div class="options" id="options">${optsHtml}</div>
+    <div id="explainSlot"></div>
+  `;
+
+  document.querySelectorAll('.option').forEach(btn=>{
+    btn.addEventListener('click', ()=>selectOption(parseInt(btn.dataset.i,10)));
+  });
+}
+
+function selectOption(i){
+  if (locked) return;
+  locked = true;
+  const q = QUESTIONS[idx];
+  const correct = i === q.correctIndex;
+  answered[idx] = correct;
+  if (correct) score++;
+
+  document.querySelectorAll('.option').forEach((btn, bi)=>{
+    btn.disabled = true;
+    if (bi === q.correctIndex){
+      btn.classList.add('is-correct');
+      btn.querySelector('.mark').textContent = '✓';
+    } else if (bi === i){
+      btn.classList.add('is-wrong');
+      btn.querySelector('.mark').textContent = '✗';
+    }
+  });
+
+  const slot = document.getElementById('explainSlot');
+  slot.innerHTML = `
+    <div class="explain ${correct ? 'right' : 'wrong'}">
+      <div class="explain-label">${correct ? 'CORRECT — WHY' : 'NOT QUITE — WHY'}</div>
+      <p>${q.explanation}</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="nextBtn">${idx === QUESTIONS.length - 1 ? 'See results' : 'Next question'}</button>
+    </div>
+  `;
+  document.getElementById('nextBtn').addEventListener('click', ()=>{
+    if (idx === QUESTIONS.length - 1) renderResults();
+    else { idx++; renderTrack(); renderQuestion(); }
+  });
+
+  renderTrack();
+  renderScore();
+}
+
+function renderResults(){
+  renderTrack();
+  const pct = Math.round((score / QUESTIONS.length) * 100);
+  let verdict;
+  if (pct === 100) verdict = "Clean sweep — you've got a solid handle on these fundamentals.";
+  else if (pct >= 70) verdict = "Strong run — a couple of gaps worth a second look.";
+  else if (pct >= 40) verdict = "Decent start — these trade-offs take repetition to stick.";
+  else verdict = "Good baseline to build from — worth another pass.";
+
+  let rowsHtml = '';
+  QUESTIONS.forEach((q,i)=>{
+    const ok = answered[i];
+    rowsHtml += `<div class="brow">
+      <span class="mark" style="color:${ok ? 'var(--good)' : 'var(--bad)'}">${ok ? '✓' : '✗'}</span>
+      <span class="tagname">${q.tag}</span>
+    </div>`;
+  });
+
+  cardEl.innerHTML = `
+    <div class="tag">Results</div>
+    <div class="results-score">${score}<span>/${QUESTIONS.length}</span></div>
+    <div class="results-line">${verdict}</div>
+    <div class="breakdown">${rowsHtml}</div>
+    <div class="actions">
+      <button class="btn ghost" id="restartBtn">Restart quiz</button>
+    </div>
+  `;
+  document.getElementById('restartBtn').addEventListener('click', restart);
+}
+
+function restart(){
+  idx = 0; score = 0; answered = new Array(QUESTIONS.length).fill(null);
+  renderTrack(); renderScore(); renderQuestion();
+}
+
+renderTrack();
+renderScore();
+renderQuestion();
+</script>

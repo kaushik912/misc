@@ -1,0 +1,15 @@
+# do-not-refactor project (own .git, keep untouched)
+kaushik912.github.io/
+
+# build artifacts
+target/
+*.class
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.idea/
+*.iml
+.DS_Store
+_site/
+.bundle/
