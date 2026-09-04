@@ -1,6 +1,3 @@
-# do-not-refactor project (own .git, keep untouched)
-kaushik912.github.io/
-
 # build artifacts
 target/
 *.class
