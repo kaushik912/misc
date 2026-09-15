@@ -1,0 +1,197 @@
+[
+  {
+    "id": "react-usestate-closures",
+    "tag": "React",
+    "difficulty": "medium",
+    "scenario": "A component uses useState for a counter. Inside a setTimeout callback registered once when the component first rendered, calling the state setter with a function that reads the 'current' count logs a stale, outdated value — even though the count displayed on screen updates correctly on every click.",
+    "question": "Why does this happen, and what's the fix?",
+    "options": [
+      "This means useState is fundamentally broken and should never be combined with setTimeout",
+      "State updates are always synchronous, so the callback must contain an unrelated typo",
+      "Each render captures its own snapshot of state via closures — a callback created during one particular render 'remembers' that render's value unless it reads state through a ref, or uses the updater-function form (setCount(prev => ...)) which always receives the latest value at the moment it actually runs, rather than the value that was closed over when the callback was originally created",
+      "This only happens in class components, never in function components using hooks"
+    ],
+    "correctIndex": 2,
+    "explanation": "A closure created during render captures the variables as they existed at that render — including state. If that closure is invoked much later (like inside an old setTimeout), it still sees the value from when it was created, not the current one. The updater-function form of the setter sidesteps this by always reading the freshest value at call time instead of relying on what got captured earlier."
+  },
+  {
+    "id": "react-usememo-usecallback",
+    "tag": "React",
+    "difficulty": "medium",
+    "scenario": "A component wraps a cheap, simple calculation (adding two numbers) in useMemo, and wraps a function prop in useCallback, hoping to improve performance — but a profiler shows no measurable improvement, and if anything, slightly worse performance.",
+    "question": "Why might useMemo/useCallback backfire here?",
+    "options": [
+      "useMemo and useCallback are purely stylistic and never carry any runtime cost either way",
+      "This means useMemo and useCallback are deprecated and should never be used in modern React",
+      "The fix is to wrap even more of the component's logic in useMemo to compensate",
+      "Both add their own overhead — extra memory to hold the cached value and its dependency list, plus a comparison check on every render — and for a computation cheap enough to just redo every render, that bookkeeping can cost more than simply recomputing it; memoization only pays off when the wrapped work is genuinely expensive, or when it prevents an expensive child component from re-rendering"
+    ],
+    "correctIndex": 3,
+    "explanation": "Memoization isn't free — it trades computation for a stored value plus a comparison to decide whether to reuse it. For genuinely cheap work, that trade is a net loss. The real payoff shows up either when the memoized work itself is expensive, or when memoizing a value/callback prevents an expensive child from re-rendering unnecessarily."
+  },
+  {
+    "id": "react-context-vs-redux",
+    "tag": "React",
+    "difficulty": "medium",
+    "scenario": "An app uses the Context API to share a frequently-changing value (e.g. a live cursor position in a collaborative editor) across many components, and notices a large portion of the component tree re-rendering on every single update — including components that don't visually depend on that value at all.",
+    "question": "What's happening, and when would Redux (or a similar external store) actually help here?",
+    "options": [
+      "Every component consuming a given Context re-renders whenever that Context's value changes, regardless of which specific piece of it a component actually uses — a state library with more granular subscriptions (like Redux with selectors, or Zustand) lets components subscribe to just the slice of state they care about, avoiding this all-or-nothing re-render behavior for frequently-changing, widely-shared state",
+      "Context API and Redux behave identically in this case, so switching wouldn't change anything",
+      "The fix is simply wrapping the app in more Context providers",
+      "Context API is only appropriate for state that changes exactly once during the app's lifetime"
+    ],
+    "correctIndex": 0,
+    "explanation": "Context's re-render model is coarse: any change to the provided value re-renders every consumer of that Context, whether or not the specific piece they read actually changed. Libraries with selector-based subscriptions let a component say 'only re-render me when this specific slice changes,' which is exactly the granularity Context lacks by default."
+  },
+  {
+    "id": "react-list-virtualization",
+    "tag": "React",
+    "difficulty": "medium",
+    "scenario": "A page renders a list of 10,000 items directly — one real DOM node per item — and scrolling and interacting with the page becomes noticeably janky.",
+    "question": "What's the standard fix, and why does it actually help rather than being just a minor optimization?",
+    "options": [
+      "Switch the list items from divs to spans, which is inherently faster to render",
+      "Virtualize the list (e.g. react-window) so only the items currently visible in the viewport (plus a small buffer) are actually rendered as real DOM nodes — the DOM node count stays roughly constant regardless of list length, instead of growing linearly with the size of the underlying data",
+      "Wrap the entire list in a single useMemo call",
+      "Permanently reduce the list to showing only the first 100 items, hiding the rest entirely"
+    ],
+    "correctIndex": 1,
+    "explanation": "The actual cost driver is DOM node count, not how the items are computed — a browser struggles to efficiently manage tens of thousands of live nodes regardless of how cheap the React-side render logic is. Virtualization changes the fundamental shape of the problem: the DOM only ever holds what's currently visible, so performance stops scaling with total list length at all."
+  },
+  {
+    "id": "js-event-loop-order",
+    "tag": "JavaScript Fundamentals",
+    "difficulty": "medium",
+    "scenario": "This code runs: console.log(1); setTimeout(() => console.log(2), 0); Promise.resolve().then(() => console.log(3)); console.log(4);",
+    "question": "What's the actual output order, and why?",
+    "options": [
+      "1, 2, 3, 4 — in the exact order the statements appear in the source",
+      "1, 4, 2, 3 — setTimeout always runs before any Promise callback, since it was registered first",
+      "1, 4, 3, 2 — synchronous code (console.log(1) and console.log(4)) runs to completion first, then the microtask queue (the Promise's .then callback) fully drains before the next macrotask (the setTimeout callback) runs, even with a 0ms delay",
+      "The order is nondeterministic and changes on every run"
+    ],
+    "correctIndex": 2,
+    "explanation": "setTimeout schedules a macrotask, while Promise.then schedules a microtask — and the event loop always drains all pending microtasks before moving on to the next macrotask, regardless of how small the setTimeout delay is. Synchronous code runs first no matter what, since nothing async even gets a turn until the current call stack is empty."
+  },
+  {
+    "id": "js-closure-var-let-loop",
+    "tag": "JavaScript Fundamentals",
+    "difficulty": "medium",
+    "scenario": "A for-loop uses var i and schedules a callback (e.g. via setTimeout) inside the loop body that logs i. Every callback ends up logging the same final value (the loop's length) instead of the value i had on that particular iteration. Switching var to let fixes it.",
+    "question": "Why does var produce this bug, and why does let fix it?",
+    "options": [
+      "var and let behave identically for loops, so the fix must be a coincidence",
+      "The fix works because let makes the scheduled callbacks run synchronously instead of asynchronously",
+      "This bug only happens with setTimeout specifically, and with no other kind of asynchronous callback",
+      "var is function-scoped, so every iteration shares the exact same single i variable — by the time any callback actually runs, the loop has already finished and i holds its final value; let is block-scoped, creating a fresh binding of i for each iteration, so each callback closes over its own iteration's value instead of one shared variable"
+    ],
+    "correctIndex": 3,
+    "explanation": "This is the classic closure-in-a-loop pitfall: with var, there's only ever one i, and all the callbacks are closures over that same single variable, whatever its final value happens to be by the time they run. let's per-iteration binding gives each closure its own separate i, frozen at that iteration's value."
+  },
+  {
+    "id": "js-event-delegation",
+    "tag": "JavaScript Fundamentals",
+    "difficulty": "easy",
+    "scenario": "A list with a few hundred clickable rows currently attaches a separate click event listener to every individual row, and adding or removing rows means constantly adding and removing listeners to match.",
+    "question": "What's a better pattern here, and why does it work?",
+    "options": [
+      "Event delegation: attach a single listener to the shared parent element and use event bubbling to determine which specific row was actually clicked (e.g. via event.target) — since events bubble up through their ancestors, one listener on the parent can handle clicks on any current or future child row, with no per-row listener management at all",
+      "Attach the listener to the document's root html element only, and ignore which specific row triggered it",
+      "Use setInterval to continuously poll for click state on every row",
+      "This can only be solved by re-rendering the entire list from scratch on every click"
+    ],
+    "correctIndex": 0,
+    "explanation": "Because a click on a child element bubbles up through every ancestor, a single listener sitting on the parent gets notified of clicks on any row — including rows added after the listener was attached — without ever needing to track or update per-row listeners as the list changes."
+  },
+  {
+    "id": "js-type-coercion",
+    "tag": "JavaScript Fundamentals",
+    "difficulty": "easy",
+    "scenario": "Code compares a value to an empty string and to the number 0 using ==, and gets surprising 'true' results for values that don't obviously look equal to each other.",
+    "question": "What's going on, and what's the standard mitigation?",
+    "options": [
+      "== and === are functionally identical in every case, so the surprising result must be an unrelated bug",
+      "== performs type coercion before comparing, converting operands into a common type using rules that can produce surprising matches (e.g. '' == 0 evaluates to true, since both sides coerce to a comparable primitive); === compares both value and type without any coercion, which is why it's the generally recommended default unless coercion is specifically intended",
+      "Type coercion only ever happens with the + operator, never with comparison operators",
+      "The fix is to manually convert every value to a string before any comparison"
+    ],
+    "correctIndex": 1,
+    "explanation": "== applies a set of coercion rules to make the two sides comparable even when they're different types, and those rules don't always match human intuition about what 'equal' should mean. === skips coercion entirely and requires both the value and the type to match, which removes an entire category of these surprises."
+  },
+  {
+    "id": "ts-type-vs-interface",
+    "tag": "TypeScript",
+    "difficulty": "easy",
+    "scenario": "A codebase uses type and interface somewhat interchangeably for describing object shapes, and someone asks whether it actually matters which one gets used.",
+    "question": "Is there a real difference, and when might it matter?",
+    "options": [
+      "They are entirely different features with zero overlap in what they can express",
+      "interface can only be used to describe classes, never plain object shapes",
+      "For plain object shapes they're largely interchangeable, but interface supports declaration merging (multiple declarations of the same interface combine automatically) and reads naturally as an extensible contract, while type can express things interface can't — unions, intersections, mapped and conditional types — so the choice starts to matter once you need those capabilities, not for a simple object shape",
+      "type is deprecated in modern TypeScript in favor of using interface exclusively"
+    ],
+    "correctIndex": 2,
+    "explanation": "The two overlap heavily for describing a basic object's shape, which is why teams often use them almost interchangeably there. The real divergence shows up at the edges: interface's declaration merging is uniquely useful for extensible/augmentable contracts, while type's ability to express unions, intersections, and mapped types has no interface equivalent."
+  },
+  {
+    "id": "ts-generics",
+    "tag": "TypeScript",
+    "difficulty": "medium",
+    "scenario": "A utility function firstOrDefault(items, fallback) needs to work correctly for an array of strings, an array of numbers, or an array of custom objects, returning a value of that same type — while still catching a type mismatch at compile time if the fallback doesn't actually match the array's element type.",
+    "question": "What TypeScript feature fits, and why does it beat just typing everything as any?",
+    "options": [
+      "any is strictly better here, since it works with every type without any extra syntax",
+      "Generics require writing a separate copy of the function for every type it needs to support",
+      "This can only be solved with function overloading, not with generics",
+      "Generics — writing the function with a type parameter (e.g. function firstOrDefault<T>(items: T[], fallback: T): T) lets the compiler enforce that items and fallback share the same concrete type at each call site, while any would compile regardless of a real mismatch and give up that safety entirely"
+    ],
+    "correctIndex": 3,
+    "explanation": "any opts out of type checking for that value altogether — the compiler would happily accept a fallback of the wrong type. A generic type parameter keeps the function reusable across types while still letting the compiler verify, at each specific call site, that the types actually being used are consistent with each other."
+  },
+  {
+    "id": "web-url-to-render",
+    "tag": "Web Fundamentals",
+    "difficulty": "easy",
+    "scenario": "A candidate is asked to walk through everything that happens between typing a URL into the browser and the page appearing on screen.",
+    "question": "What's the correct high-level sequence?",
+    "options": [
+      "DNS resolution (turn the domain into an IP address) → TCP connection (plus a TLS handshake for HTTPS) → HTTP request/response → the browser parses the response and renders the page (building the DOM/CSSOM, then painting)",
+      "The browser renders a cached version of the page first, and only checks DNS afterward",
+      "The TLS handshake happens before DNS resolution, since encryption has to be established before anything else",
+      "HTTP requests don't require any network connection to be established beforehand"
+    ],
+    "correctIndex": 0,
+    "explanation": "Each step depends on the one before it: you can't open a TCP connection (or negotiate TLS on top of it) without first knowing an IP address to connect to, and you can't send an HTTP request until that connection exists. The rendering step only starts once a response actually comes back to parse."
+  },
+  {
+    "id": "web-cors-preflight",
+    "tag": "Web Fundamentals",
+    "difficulty": "medium",
+    "scenario": "A frontend app on one origin calls an API on a different origin using a request that isn't 'simple' by CORS rules (say, a PUT with a JSON body and a custom header). The browser automatically sends an extra OPTIONS request before the real one — code the developer never wrote.",
+    "question": "What is that extra request, and why does the browser send it automatically?",
+    "options": [
+      "It's a retry triggered because the first request timed out",
+      "A CORS preflight request — for requests that don't qualify as 'simple' under CORS rules (certain methods, custom headers, certain content types), the browser first asks the server via OPTIONS whether the actual cross-origin request is permitted, before sending the real one; this is a safety check enforced by the browser itself, not something the application code triggers directly",
+      "It's an unrelated bug in the app's networking code that needs fixing",
+      "It's a caching mechanism unrelated to cross-origin requests"
+    ],
+    "correctIndex": 1,
+    "explanation": "The browser, not your application code, decides when a preflight is needed, based purely on whether the actual request falls outside the narrow 'simple request' rules. It's a built-in safety gate: the server has to explicitly respond that it allows the specific origin, method, and headers being requested before the browser will let the real request through."
+  },
+  {
+    "id": "web-local-vs-session-storage",
+    "tag": "Web Fundamentals",
+    "difficulty": "easy",
+    "scenario": "An app needs to persist a user's draft form input across a page refresh, but have it cleared once the browser tab is closed — and separately needs to persist a 'remember this device' flag that should survive even after the browser itself is closed and reopened.",
+    "question": "Which storage mechanism fits each need?",
+    "options": [
+      "Both cases should use cookies, since only cookies can persist data in a browser at all",
+      "localStorage for both, since sessionStorage cannot store more than a few bytes of data",
+      "sessionStorage for the draft (scoped to the tab's lifetime, cleared once the tab closes) and localStorage for the 'remember this device' flag (persists across browser restarts until explicitly cleared) — cookies would also technically persist either value, but add overhead by being sent along with every HTTP request, which neither case here actually needs",
+      "sessionStorage for both, since localStorage is deprecated in modern browsers"
+    ],
+    "correctIndex": 2,
+    "explanation": "The two storages differ mainly in lifetime: sessionStorage is tied to a single tab's session and disappears when it closes, while localStorage sticks around until something explicitly clears it, including across browser restarts. Cookies could technically hold either value too, but they're sent on every matching request whether the server needs that data or not, which is unnecessary overhead for data that's purely client-side."
+  }
+]

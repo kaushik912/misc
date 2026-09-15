@@ -1,0 +1,302 @@
+[
+  {
+    "id": "java-hashmap-collision",
+    "tag": "Java Core & Collections",
+    "difficulty": "medium",
+    "scenario": "A class is used as a HashMap key. It overrides equals() to compare by a business id field, but never overrides hashCode(). Objects that should clearly be 'equal' seem to vanish — put() one instance in, then look it up with a different-but-equal instance, and get() returns null.",
+    "question": "Why does this happen, conceptually?",
+    "options": [
+      "equals() alone fully determines HashMap behavior; hashCode() is only used for printing/debugging",
+      "This only happens if the class is also mutable",
+      "HashMap uses hashCode() first to pick a bucket, then equals() only to compare within that bucket — without an overridden hashCode(), two 'equal' objects can land in different buckets under the default (identity-based) hash, and the map never even calls equals() to compare them, so the lookup silently misses",
+      "HashMap ignores equals() entirely and relies solely on object identity"
+    ],
+    "correctIndex": 2,
+    "explanation": "hashCode() and equals() form a contract: equal objects must produce equal hash codes. HashMap uses the hash code purely to narrow the search to one bucket — it only calls equals() on candidates already in that bucket. Break the contract, and two 'equal' objects can end up in different buckets, so the second one is never even considered a candidate for comparison."
+  },
+  {
+    "id": "java-hashmap-vs-concurrenthashmap",
+    "tag": "Java Core & Collections",
+    "difficulty": "medium",
+    "scenario": "A service shares a plain HashMap across multiple threads as a simple in-memory cache, and starts hitting intermittent ConcurrentModificationException and corrupted state under load. Someone proposes wrapping every access in one big synchronized block around the map.",
+    "question": "What's the better fix, and why?",
+    "options": [
+      "Wrapping every access in one single synchronized block is actually the best fix here, since it's the simplest to reason about",
+      "HashMap is already thread-safe as long as you only ever read from it, so no fix is needed for a read/write mix",
+      "ConcurrentHashMap avoids all locking entirely and is fully lock-free, which is why it's the right replacement",
+      "Switch to ConcurrentHashMap, which achieves thread safety through fine-grained internal locking/CAS on parts of the map rather than one lock guarding the whole structure — so concurrent reads and writes to different keys don't have to serialize behind a single global lock the way a synchronized-wrapped HashMap would force them to"
+    ],
+    "correctIndex": 3,
+    "explanation": "A single external lock around a HashMap turns every access — reads and writes, on any key — into a serial bottleneck. ConcurrentHashMap gets its safety from finer-grained coordination internally (segment locking pre-Java 8, CAS-based bucket updates in Java 8+), so unrelated keys can be accessed concurrently without contending for the same lock."
+  },
+  {
+    "id": "java-fail-fast-iterator",
+    "tag": "Java Core & Collections",
+    "difficulty": "easy",
+    "scenario": "Code iterates over a List with a for-each loop and calls list.remove(item) directly on certain items inside that loop, and the app throws a ConcurrentModificationException.",
+    "question": "Why does this happen, and what's the standard fix?",
+    "options": [
+      "The list's iterator is fail-fast — it detects the list was structurally modified during iteration (via an internal modification-count check) and throws immediately rather than risk an inconsistent traversal; the fix is to remove through the iterator's own remove() method, use removeIf(), or collect items to delete and remove them after the loop finishes",
+      "This means the list itself has become corrupted and needs to be rebuilt from scratch",
+      "This only happens with ArrayList, never with LinkedList",
+      "The fix is to wrap the loop in a try/catch and simply ignore the exception"
+    ],
+    "correctIndex": 0,
+    "explanation": "A fail-fast iterator would rather throw immediately than silently produce a skipped element, a repeated element, or an infinite loop from a collection changing shape mid-traversal. Removing safely means going through a mechanism the iteration itself is aware of — its own remove(), Collection.removeIf, or a separate pass after iterating."
+  },
+  {
+    "id": "java-completablefuture-common-pool",
+    "tag": "Java 8+ & Concurrency",
+    "difficulty": "medium",
+    "scenario": "A codebase calls CompletableFuture.supplyAsync() throughout, always relying on its default thread pool rather than passing a custom Executor. Under heavy load, unrelated parts of the application — including code that never touches these async calls directly — start experiencing delays.",
+    "question": "Why, and what's the fix?",
+    "options": [
+      "supplyAsync() creates a brand-new dedicated thread for every single call, so this must actually be a memory problem instead",
+      "supplyAsync() defaults to the shared ForkJoinPool.commonPool(), which other parts of the JVM (like parallel streams) also rely on — a flood of async tasks can starve that shared pool and slow down anything else depending on it; the fix is passing an explicit, appropriately-sized ExecutorService dedicated to this workload",
+      "This is expected, unavoidable behavior and there's nothing that can be done about it",
+      "The fix is to stop using CompletableFuture entirely and manage plain Thread objects by hand"
+    ],
+    "correctIndex": 1,
+    "explanation": "The default async pool isn't private to your call site — it's a JVM-wide shared resource. Saturating it with one workload starves every other piece of code (including unrelated parallel streams) that also happens to rely on the common pool. Giving your workload its own executor contains the blast radius to just that workload."
+  },
+  {
+    "id": "java-future-vs-completablefuture",
+    "tag": "Java 8+ & Concurrency",
+    "difficulty": "easy",
+    "scenario": "Code calls future.get() to wait for a background task's result, blocking the calling thread until the task finishes, with no way to react to completion other than sitting there blocked.",
+    "question": "What does CompletableFuture actually add here, conceptually?",
+    "options": [
+      "CompletableFuture is only a renamed version of Future with no real functional difference",
+      "CompletableFuture removes the need for any thread pool at all",
+      "It lets you compose what happens next — via callbacks like thenApply, thenCombine, or exception handlers — that run automatically once the result becomes available, turning 'block the thread and wait' into 'describe what to do once it's ready'",
+      "CompletableFuture can only be used specifically for HTTP calls"
+    ],
+    "correctIndex": 2,
+    "explanation": "A plain Future gives you a handle to a result but no way to react to it without blocking a thread on get(). CompletableFuture adds a composable API for chaining, combining, and reacting to results (and failures) as callbacks — the thread issuing the async call doesn't have to sit there waiting to find out what happened."
+  },
+  {
+    "id": "java-virtual-threads",
+    "tag": "Java 8+ & Concurrency",
+    "difficulty": "medium",
+    "scenario": "A service handles thousands of concurrent requests, each mostly blocked waiting on I/O (calls to other services or a database) rather than doing CPU work. Under the traditional one-platform-thread-per-request model, the app runs out of threads long before it runs out of CPU.",
+    "question": "How do virtual threads (Java 21) address this, and when would they NOT help?",
+    "options": [
+      "Virtual threads make CPU-bound code run faster automatically, purely by existing",
+      "Virtual threads eliminate the need to think about thread pool sizing in every scenario, with no exceptions",
+      "Virtual threads are just platform threads under a different name, with no real behavioral difference",
+      "Virtual threads let you keep writing the same blocking-style code, but the JVM multiplexes many of them onto a small number of platform threads, unmounting a virtual thread while it's blocked on I/O so the underlying platform thread can serve another one — this helps exactly when threads spend most of their time blocked on I/O, but doesn't help (and can even hurt) for CPU-bound work, since more virtual threads doesn't create more CPU cores"
+    ],
+    "correctIndex": 3,
+    "explanation": "The win is specifically about the I/O-blocked case: a virtual thread parked on a blocking call gives its platform thread back to serve someone else, so you can have far more concurrent 'threads' than you have OS threads. For pure CPU-bound work, there's nothing idle to reclaim, so virtual threads don't add capacity you didn't already have."
+  },
+  {
+    "id": "resiliency-circuit-breaker-states",
+    "tag": "Resiliency Patterns",
+    "difficulty": "medium",
+    "scenario": "A circuit breaker sits in front of a flaky downstream call and moves through three distinct states over time as that downstream service fails and later recovers.",
+    "question": "What are those states, and what does each actually do?",
+    "options": [
+      "Closed (calls pass through normally, failures are counted), Open (calls fail fast immediately, without even attempting the downstream call, once a failure threshold is crossed), and Half-Open (after a cooldown, a limited number of trial calls are let through to test recovery, deciding whether to close again or reopen)",
+      "Open, Closed, and Locked — where Locked means the breaker can never recover automatically",
+      "Just two states in practice: Working and Broken, toggled manually by an operator",
+      "Active, Paused, and Deleted, mirroring a typical feature-flag lifecycle"
+    ],
+    "correctIndex": 0,
+    "explanation": "The three-state cycle is what makes a circuit breaker self-healing: Closed is the normal path, Open stops sending doomed calls once things clearly aren't working, and Half-Open is a deliberate, limited probe to check whether it's safe to go back to Closed — without that probing state, the breaker would either never recover on its own, or recover by blindly flooding the dependency again."
+  },
+  {
+    "id": "resiliency-circuit-breaker-vs-retry",
+    "tag": "Resiliency Patterns",
+    "difficulty": "easy",
+    "scenario": "A downstream service is failing consistently under load. The client currently just retries every failed call a few times before giving up.",
+    "question": "How is a circuit breaker different from retrying, and why might retry alone make things worse here?",
+    "options": [
+      "They are effectively the same pattern under different names",
+      "Retry keeps re-attempting the same call, which — if the downstream service is already overloaded — adds more load exactly when it can least absorb it; a circuit breaker instead detects sustained failure and stops sending calls for a while, giving the downstream service room to recover instead of piling more attempts onto it",
+      "A circuit breaker is really just a retry mechanism with a longer delay between attempts",
+      "Retrying is always safe, and a circuit breaker is only useful for permanent failures, never transient ones"
+    ],
+    "correctIndex": 1,
+    "explanation": "Retry assumes the next attempt might succeed; a circuit breaker assumes the opposite once failures cross a threshold — that more attempts right now will only make things worse. The two patterns are often combined (retry for transient blips, circuit breaker for sustained trouble), but they solve different problems and can actively work against each other if retry alone is relied on during an outage."
+  },
+  {
+    "id": "resiliency-backoff-jitter",
+    "tag": "Resiliency Patterns",
+    "difficulty": "medium",
+    "scenario": "Many client instances all fail a call to the same downstream service at roughly the same moment (e.g. right after it comes back up from an outage), and all retry using fixed exponential backoff with identical delay intervals.",
+    "question": "What problem does this create, and how does adding jitter fix it?",
+    "options": [
+      "Exponential backoff alone is already sufficient on its own; jitter is purely cosmetic and has no functional effect",
+      "Jitter exists to make retries happen sooner, not to spread them out over time",
+      "Every client ends up retrying at the exact same moments (all at 1s, then all at 2s, then all at 4s...), creating synchronized bursts of load that can knock the just-recovered service back down; adding random jitter to each delay spreads retries out over time instead of letting them all line up",
+      "This problem can only occur with a single client, never with many clients retrying the same service simultaneously"
+    ],
+    "correctIndex": 2,
+    "explanation": "This is the classic 'retry storm' or thundering-herd problem: fixed backoff intervals keep every client perfectly synchronized with each other, so their retries arrive as coordinated waves instead of spread-out attempts. Jitter breaks that synchronization by randomizing each client's delay slightly, smoothing the retry traffic into something the recovering service can actually absorb."
+  },
+  {
+    "id": "messaging-kafka-vs-rabbitmq",
+    "tag": "Messaging Systems",
+    "difficulty": "easy",
+    "scenario": "A team needs to pick between Kafka and RabbitMQ. They want a brand-new consumer to be able to replay the last 24 hours of events on demand, and they expect several independent consumer groups to each read the same stream of events at their own pace.",
+    "question": "Which fits better, and why?",
+    "options": [
+      "RabbitMQ, because it guarantees exactly-once processing while Kafka does not",
+      "Either fits equally well; there's no meaningful difference for this use case",
+      "Neither fits; this requirement always calls for a dedicated event-sourcing database instead",
+      "Kafka — it's built around durable, replayable event logs, where messages persist for a configured retention period and multiple independent consumer groups can each read the same log at their own offset and pace, rather than a message disappearing once one consumer has handled it"
+    ],
+    "correctIndex": 3,
+    "explanation": "RabbitMQ is fundamentally a task-delivery broker: once a message is consumed and acknowledged, it's typically gone. Kafka is built around a durable, ordered log that consumers read from without removing anything — that's exactly what makes replay and multiple independent consumer groups natural in Kafka, and awkward to bolt onto RabbitMQ."
+  },
+  {
+    "id": "messaging-consumer-offset-crash",
+    "tag": "Messaging Systems",
+    "difficulty": "medium",
+    "scenario": "A Kafka consumer processes a batch of messages, then crashes before it commits its offset for that batch back to Kafka.",
+    "question": "What happens when a new consumer instance picks up where it left off, and why is that the safer default?",
+    "options": [
+      "The new consumer resumes from the last committed offset, so it re-receives (and reprocesses) the messages that were handled but never had their offset committed — this is at-least-once delivery, which is why consumers need to tolerate reprocessing the same message safely (idempotently) rather than assuming each message arrives exactly once",
+      "Those messages are permanently lost, since Kafka has no way to redeliver them once a consumer has read them once",
+      "Kafka automatically figures out which specific messages were 'probably' already processed and skips only those",
+      "The new consumer always restarts from the very beginning of the topic whenever any crash happens"
+    ],
+    "correctIndex": 0,
+    "explanation": "Committing an offset is Kafka's way of saying 'I'm done with everything up to here' — if that commit never happens, resuming from the last committed point necessarily means re-delivering what came after it. Kafka defaults to this at-least-once behavior because losing messages (at-most-once) is usually far worse than occasionally reprocessing one, which is why idempotent consumers are the standard companion to this default."
+  },
+  {
+    "id": "messaging-poison-pill",
+    "tag": "Messaging Systems",
+    "difficulty": "medium",
+    "scenario": "A consumer repeatedly crashes or throws while processing one specific message. Because it never successfully commits that message's offset, it keeps re-fetching and re-failing on the exact same message indefinitely, blocking everything queued behind it.",
+    "question": "What's this problem called, and what's the standard way to handle it?",
+    "options": [
+      "This is expected Kafka behavior that requires no special handling",
+      "The 'poison pill' problem — the fix is distinguishing transient failures (worth retrying) from permanent ones (a malformed or unprocessable message), and routing messages that keep permanently failing to a Dead Letter Queue after a bounded number of attempts, instead of retrying the same message forever and blocking the rest of the queue",
+      "The fix is to always skip the current offset immediately on any exception, with no further logic needed",
+      "This can only be fixed by deleting and recreating the entire topic"
+    ],
+    "correctIndex": 1,
+    "explanation": "The core issue is that a message which can never succeed looks identical, from the consumer's perspective, to a message that just needs one more retry — treating every failure as transient means one bad message can stall the whole partition forever. A DLQ gives permanently-failing messages somewhere to go after a bounded number of attempts, so processing can move on."
+  },
+  {
+    "id": "aws-sqs-vs-sns",
+    "tag": "AWS & Cloud",
+    "difficulty": "easy",
+    "scenario": "An order confirmation needs to trigger an email, an SMS, and an update to an analytics pipeline — three independent consumers reacting to the same event.",
+    "question": "Should this go through SQS, SNS, or both — and why?",
+    "options": [
+      "SQS alone, since SQS natively delivers the same message to every subscriber listening on it",
+      "SNS alone, without any SQS queues, since SNS itself provides durable, independent queuing per consumer",
+      "SNS to fan the single event out to all three, typically paired with one SQS queue per consumer (SNS → multiple SQS queues) so each consumer gets its own durable, independently-processed copy — plain SQS alone only delivers a given message to one consumer of that queue, not to three separate independent listeners",
+      "Neither service is designed for this; only a direct REST call to each consumer would work"
+    ],
+    "correctIndex": 2,
+    "explanation": "SQS is built around one message being consumed once by one worker pulling from that queue — it's not a fan-out mechanism on its own. SNS provides the fan-out (one publish, many subscribers), and pairing it with a dedicated SQS queue per subscriber gives each consumer its own durable, at-its-own-pace processing of that same event."
+  },
+  {
+    "id": "aws-lambda-cold-start",
+    "tag": "AWS & Cloud",
+    "difficulty": "medium",
+    "scenario": "An API backed by AWS Lambda works fine under steady traffic, but occasionally one request — specifically the first one after a period of no traffic to that function — takes noticeably longer than the rest.",
+    "question": "What's happening, and when does it actually matter?",
+    "options": [
+      "Cold starts only ever happen the very first time a Lambda function is ever deployed, never again after that",
+      "A cold start means the function's code has a bug that needs fixing",
+      "This is unrelated to traffic patterns and happens at fully random intervals",
+      "A 'cold start' — with no warm execution environment available, Lambda has to initialize a fresh one (bootstrapping the runtime, your code, and its dependencies) before it can handle the request, adding latency only on that initial invocation; it matters most for latency-sensitive, user-facing paths with sparse or spiky traffic, and matters far less for infrequent background/batch jobs where a little extra latency doesn't hurt anything"
+    ],
+    "correctIndex": 3,
+    "explanation": "Lambda reuses warm execution environments when it can, but once one has been idle long enough (or under a fresh burst of concurrency), a new one has to be provisioned from scratch — that provisioning time is the cold start. Whether it's worth worrying about depends entirely on the workload: a user-facing API feels every extra millisecond, while a background job usually doesn't care."
+  },
+  {
+    "id": "nosql-cap-tradeoff",
+    "tag": "NoSQL Databases",
+    "difficulty": "medium",
+    "scenario": "Comparing DynamoDB's typical default behavior against a traditional single-primary PostgreSQL setup, in terms of the CAP theorem.",
+    "question": "Which combination is accurate, and why doesn't 'CA' really exist for a genuinely distributed system?",
+    "options": [
+      "DynamoDB is typically configured as AP (favors availability during a partition, potentially returning stale data), while PostgreSQL in a typical single-primary setup behaves as CP (favors consistency, potentially rejecting or blocking requests during a partition) — a true 'CA' system would need to never experience a network partition at all, which isn't realistic for any system that spans more than one node or network path",
+      "Both DynamoDB and PostgreSQL are CA systems, since both guarantee full consistency and full availability at the same time",
+      "It's actually the reverse: DynamoDB is CP and PostgreSQL is AP",
+      "CAP theorem doesn't meaningfully apply to either system, since it only concerns systems with more than 100 nodes"
+    ],
+    "correctIndex": 0,
+    "explanation": "CAP is really about what a system does when a partition happens — and for any system with more than one node communicating over a network, a partition is a when, not an if. That's why 'CA' isn't a real long-term option: the P is unavoidable, so the actual design choice is always between favoring C or favoring A once a partition occurs."
+  },
+  {
+    "id": "nosql-dynamodb-partition-key",
+    "tag": "NoSQL Databases",
+    "difficulty": "medium",
+    "scenario": "A DynamoDB table for user activity events picks a partition key of event_type — which only has a handful of distinct values, like 'login' or 'purchase.' One partition becomes a massive hot spot receiving nearly all the traffic, while the others sit almost idle.",
+    "question": "What went wrong with the key choice, and what should it look for instead?",
+    "options": [
+      "The partition key choice doesn't actually affect performance in DynamoDB, since it auto-scales transparently regardless of key shape",
+      "A good partition key needs high cardinality and even access distribution — event_type has far too few distinct values, so most traffic concentrates onto very few partitions; a key like user_id (or a composite designed to spread writes more evenly) distributes load far more evenly across the underlying partitions",
+      "The fix is switching to a numeric partition key type instead of a string, regardless of how its values are actually distributed",
+      "DynamoDB doesn't support tables with fewer than some fixed minimum number of distinct partition key values"
+    ],
+    "correctIndex": 1,
+    "explanation": "DynamoDB spreads data (and the request capacity that comes with it) across partitions based on the partition key's value — a key with only a few possible values inevitably funnels most requests onto a matching handful of partitions, no matter how the table is otherwise configured. Choosing a key with naturally high cardinality is what actually spreads the load."
+  },
+  {
+    "id": "dsa-username-check-scale",
+    "tag": "DSA — Scenario-Based",
+    "difficulty": "easy",
+    "scenario": "A gaming platform with over a million registered usernames needs to check 'is this username already taken?' instantly, as a user types it during signup.",
+    "question": "Which data structure fits, and what's the follow-up concern at very large scale?",
+    "options": [
+      "A sorted array with binary search, since usernames need to stay sorted for this approach to work",
+      "A linked list, since it lets you check membership without needing any extra memory for a hash table",
+      "A HashSet of usernames gives O(1) average lookup — exactly what 'instantly' calls for; at very large scale, if the memory footprint of holding the full set becomes a real concern, a Bloom filter can approximate the check first (no false negatives, occasional false positives) before falling back to an exact check only when needed",
+      "This requires a full database query on every keystroke; no in-memory structure meaningfully helps"
+    ],
+    "correctIndex": 2,
+    "explanation": "A hash-based set is the textbook fit for 'have I seen this exact value before' at O(1). The Bloom filter follow-up is the natural next step once someone raises memory at scale — a probabilistic structure that can quickly say 'definitely not taken' for the vast majority of checks, reserving the exact (more expensive) check for the rarer cases it can't rule out."
+  },
+  {
+    "id": "dsa-lru-cache",
+    "tag": "DSA — Scenario-Based",
+    "difficulty": "medium",
+    "scenario": "You need to build a cache capped at 10,000 items that evicts the least-recently-used item whenever it's full, with every operation — get, put, and eviction — required to run in O(1).",
+    "question": "What data structure combination achieves this?",
+    "options": [
+      "A single sorted array, since keeping it sorted makes the least-recently-used item easy to find",
+      "A HashMap alone, since maps already track insertion order well enough to support LRU eviction without any additional structure",
+      "A priority queue keyed by access time, since heaps are the standard way LRU caches are implemented",
+      "A HashMap (for O(1) key lookup) paired with a doubly linked list (to track recency order, with O(1) insertion/removal at either end) — the map gives instant access to a node, and the list lets you move that node to the front on access and evict from the back, both in O(1)"
+    ],
+    "correctIndex": 3,
+    "explanation": "A HashMap alone gives fast lookup but no notion of recency ordering; a heap gives ordering but its update/removal of an arbitrary element isn't O(1). The map+doubly-linked-list combination is specifically what gives O(1) for all three required operations: locate a node instantly via the map, then reorder or evict it in constant time via the list's pointer structure."
+  },
+  {
+    "id": "dsa-top-k-min-heap",
+    "tag": "DSA — Scenario-Based",
+    "difficulty": "medium",
+    "scenario": "A stock trading app receives thousands of price updates per second and needs to continuously display the top 10 most expensive stocks currently being tracked.",
+    "question": "What structure fits, and why a min-heap rather than a max-heap of the same size?",
+    "options": [
+      "A min-heap of size 10 holding the current top 10 — when a new price arrives, it's compared against the heap's smallest element (the root); if the new price is larger, it replaces that smallest one, so the heap always discards exactly the weakest member of the current top 10 in O(log 10), without needing to scan or resort the whole top-10 set on every update",
+      "A max-heap of size 10, since keeping the largest values at the root makes it more direct to find the top 10",
+      "A fully sorted array of every tracked stock, re-sorted from scratch after each price update",
+      "A single variable tracking only the single highest price seen so far, updated on every change"
+    ],
+    "correctIndex": 0,
+    "explanation": "The counterintuitive part is exactly the point: you want to know your top 10's *weakest* member fast, because that's the one candidate every new update needs to be compared against and might replace. A min-heap puts that weakest member right at the root for an O(log 10) check and swap; a max-heap would put the strongest member at the root instead, which isn't the one you need to compare against."
+  },
+  {
+    "id": "dsa-browser-history",
+    "tag": "DSA — Scenario-Based",
+    "difficulty": "easy",
+    "scenario": "You're implementing browser-style back/forward navigation: visiting a brand-new page while some 'forward' history exists should discard that forward history, and back/forward navigation should both be fast, constant-time operations.",
+    "question": "Which structure fits this naturally?",
+    "options": [
+      "A single doubly linked list with no stacks involved, since a linked list alone already models this behavior with no extra state",
+      "Two stacks — one for 'back' history and one for 'forward' history; visiting a new page pushes it onto 'back' and clears the 'forward' stack entirely, while navigating back or forward pops from one stack and pushes onto the other, all in O(1)",
+      "A single queue, since FIFO ordering naturally matches back/forward navigation",
+      "A binary search tree keyed by visit timestamp"
+    ],
+    "correctIndex": 1,
+    "explanation": "The 'visiting somewhere new clears forward history' rule maps directly onto 'clear one of the two stacks' — a linked list or queue on its own doesn't give you that same clean split between two independently-clearable directions, and a BST adds ordering machinery this problem doesn't actually need."
+  }
+]

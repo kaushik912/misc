@@ -1,0 +1,152 @@
+[
+  {
+    "id": "payment-idempotency-race",
+    "tag": "Idempotency",
+    "difficulty": "medium",
+    "scenario": "You add idempotency keys to the payment API: on each request, check if the key has been seen before, and if not, process the payment and store the key. Under load, two identical retries (same idempotency key) arrive within milliseconds of each other, and both pass the 'have I seen this key?' check before either has finished storing it — both get processed, and the customer is charged twice.",
+    "question": "What's the real bug here, and how do you fix it?",
+    "options": [
+      "The check-then-act (read, then write) sequence isn't atomic, so two concurrent requests can both see 'not seen yet' before either commits; the fix is an atomic check-and-set operation — a unique constraint on the idempotency key column, or an atomic Redis SETNX — so the second concurrent request fails or waits instead of racing past the first",
+      "Idempotency keys don't actually help with concurrent requests, only sequential ones, so this is expected and unfixable",
+      "The fix is to add a fixed delay before processing so concurrent duplicates are unlikely to overlap in practice",
+      "This only happens because Redis was used instead of the primary database; switching the idempotency store to the primary database eliminates the race entirely"
+    ],
+    "correctIndex": 0,
+    "explanation": "A separate read-then-write for the idempotency check has a race window between the two steps. What actually closes that window is making the 'claim this key' step atomic — a DB unique constraint that the second insert violates, or an atomic SETNX in Redis — so only one of the two concurrent attempts can ever win the race, regardless of which store you use."
+  },
+  {
+    "id": "payment-partial-failure-saga",
+    "tag": "Saga Pattern",
+    "difficulty": "medium",
+    "scenario": "A transfer deducts from the sender's account and credits the receiver's account. When both live in the same database, a single ACID transaction with rollback handles a mid-way crash cleanly. Now sender and receiver accounts live in two different services with their own separate databases, and the DB crashes right after the deduction commits but before the credit happens.",
+    "question": "Since there's no single transaction spanning both databases anymore, what's the standard way to keep the two sides consistent?",
+    "options": [
+      "A Saga: each step (deduct, credit) is its own local transaction, and if a later step fails, a compensating action (e.g. refund the sender) undoes the earlier one — trading strict, immediate atomicity for eventual consistency with an explicit recovery path",
+      "Just retry the whole transfer from the top repeatedly until both steps happen to succeed in the same pass",
+      "Accept that occasional lost or duplicated money transfers are an unavoidable cost of a multi-database design",
+      "Move both accounts back into a single shared database, since that's the only way to guarantee consistency"
+    ],
+    "correctIndex": 0,
+    "explanation": "Once you can't hold one transaction across two databases, the Saga pattern gives you an explicit way to reason about 'what needs undoing if we stop partway through' — the deduction has to actually be reversible (a compensating credit back) rather than assuming the crash can't happen."
+  },
+  {
+    "id": "payment-cqrs",
+    "tag": "CQRS",
+    "difficulty": "medium",
+    "scenario": "The payment database handles 10,000 writes/second for new transactions, and also serves heavy read traffic for account balance lookups and reporting dashboards. The reporting queries are competing for the same database resources as the transactional writes, and both are getting slower.",
+    "question": "How does CQRS (Command Query Responsibility Segregation) actually help here, beyond just 'add a read replica'?",
+    "options": [
+      "It separates the write model — kept lean and optimized purely for fast, correct transactional writes — from a distinct read model (which could be a replica, a denormalized store, or a search index) built specifically for the query patterns reads need, so reporting/dashboard traffic no longer directly competes with or slows down the payment write path",
+      "CQRS means writing the application in two different programming languages, one for reads and one for writes",
+      "CQRS eliminates the need for a database on the write side entirely",
+      "CQRS is only about caching; it has nothing to do with splitting reads and writes structurally"
+    ],
+    "correctIndex": 0,
+    "explanation": "A read replica alone still ties you to the same schema and query shape as the write side. CQRS goes a step further by letting the read side be modeled completely differently — shaped for how it's actually queried — while the write side stays focused and unburdened by report-friendly indexes or denormalization it doesn't need for its own job."
+  },
+  {
+    "id": "payment-async-queue",
+    "tag": "Async Messaging",
+    "difficulty": "medium",
+    "scenario": "Instead of synchronously deducting the balance and waiting for full settlement before responding, the design puts a Kafka queue between the API Gateway and the payment service: the API accepts the request quickly, and settlement happens asynchronously in the background — targeting 10,000 transactions/second.",
+    "question": "What does inserting the queue actually buy you at that scale?",
+    "options": [
+      "It absorbs bursts in incoming traffic and lets the payment service consume and process at a sustainable pace, so a spike above what the database can immediately handle gets buffered briefly instead of overwhelming the write path or forcing rejections",
+      "It makes each individual payment settle faster than a direct synchronous call would",
+      "It removes the payment service's need to talk to a database at all",
+      "Its main purpose here is guaranteeing payments settle in the exact order users submitted them"
+    ],
+    "correctIndex": 0,
+    "explanation": "The queue decouples the rate at which requests arrive from the rate at which the payment service can safely process them — that buffering, not raw per-transaction speed, is what protects the database from a traffic spike large enough to otherwise overwhelm it."
+  },
+  {
+    "id": "payment-notification-idempotent-consumer",
+    "tag": "Idempotency",
+    "difficulty": "medium",
+    "scenario": "After a payment settles, a notification service consumes a 'payment settled' event from Kafka to send a receipt email. Kafka's at-least-once delivery occasionally redelivers the same event, and the user gets two identical receipt emails for one payment.",
+    "question": "What's the right fix?",
+    "options": [
+      "Make the notification consumer idempotent — track which payment IDs it has already sent a receipt for and skip anything already handled — rather than trying to force the messaging layer itself into a guarantee it doesn't naturally provide",
+      "Switch to a message broker that promises true exactly-once delivery in every case, and remove all dedup logic on the consumer side",
+      "Have the payment service call the notification service synchronously instead, since synchronous calls are never delivered twice",
+      "Treat duplicate receipt emails as an acceptable, unfixable side effect of using Kafka"
+    ],
+    "correctIndex": 0,
+    "explanation": "At-least-once delivery is a deliberate, common trade-off — it's simpler and safer than the alternative (at-most-once, which can silently lose events). The standard response isn't to fight the transport layer, it's to make the consumer's own processing idempotent so a redelivered event is a no-op the second time."
+  },
+  {
+    "id": "payment-rate-limiting-gateway",
+    "tag": "API Gateway",
+    "difficulty": "easy",
+    "scenario": "In the proposed architecture, authentication and rate limiting sit at the API Gateway, in front of the payment service itself, rather than being implemented inside the payment service's own code.",
+    "question": "Why put it there instead of inside each service?",
+    "options": [
+      "So every request is authenticated and throttled before it consumes any resources in the payment service (or any other service behind the gateway), instead of every service having to independently implement and maintain the same auth/rate-limiting logic",
+      "Because the payment service is technically incapable of running authentication logic itself",
+      "Rate limiting is only possible at a dedicated network gateway layer and can never be implemented in application code",
+      "It's purely a stylistic convention with no real operational benefit"
+    ],
+    "correctIndex": 0,
+    "explanation": "Centralizing cross-cutting concerns like auth and rate limiting at the gateway means a malicious or excessive request gets rejected before it ever reaches (and burns resources in) the services behind it, and every service doesn't need to reimplement and keep the same logic in sync."
+  },
+  {
+    "id": "payment-db-crash-recovery",
+    "tag": "Idempotency",
+    "difficulty": "medium",
+    "scenario": "The database crashes right after the payment service issues a write, but before it receives a confirmed commit acknowledgment back. The client sees a timeout and has no way to know whether the payment actually went through before the crash.",
+    "question": "Given that ambiguity, how does an idempotency-key-based retry make it safe for the client to just retry, regardless of which actually happened?",
+    "options": [
+      "The retry carries the same idempotency key: if the original write had actually committed, the retry finds the already-completed result and returns it without reprocessing; if it hadn't committed, the retry safely processes it fresh — either way, the client never ends up double-charged just because it couldn't tell what happened the first time",
+      "The client should always assume the write failed and simply reprocess from scratch on every retry",
+      "The client should always assume the write succeeded and should never retry after a timeout",
+      "This ambiguity is fully eliminated as long as the database uses ACID transactions, so no special retry handling is needed"
+    ],
+    "correctIndex": 0,
+    "explanation": "This is exactly the scenario idempotency keys exist for: the client genuinely cannot know if a request landed before a crash, and rather than guessing, the retry is designed to be safe either way — this is the practical answer to 'what happens if your database goes down mid-transaction?'"
+  },
+  {
+    "id": "payment-exactly-once-myth",
+    "tag": "Messaging Semantics",
+    "difficulty": "hard",
+    "scenario": "A teammate proposes: 'let's configure our message queue for exactly-once delivery, then we won't need idempotency keys anywhere anymore.'",
+    "question": "What's the flaw in that plan?",
+    "options": [
+      "Systems that advertise 'exactly-once' processing typically achieve it internally by combining at-least-once delivery with idempotent handling on the consumer side — so dropping your own idempotency logic and relying purely on the transport layer's claim just moves the same problem out of your control without actually removing it",
+      "Exactly-once delivery is a fully solved, foolproof guarantee across all major message queues, so removing idempotency keys is safe",
+      "Idempotency keys and exactly-once delivery solve entirely unrelated problems, so there's no overlap to worry about either way",
+      "This is fine because duplicate payments are rare enough in practice to not matter at scale"
+    ],
+    "correctIndex": 0,
+    "explanation": "True exactly-once semantics across an unreliable network is famously difficult in the general case; practical 'exactly-once' systems achieve the appearance of it by deduplicating on the receiving side — which is the same idempotent-consumer pattern you'd build yourself, just relocated and out of your visibility."
+  },
+  {
+    "id": "payment-saga-vs-2pc",
+    "tag": "Saga Pattern",
+    "difficulty": "hard",
+    "scenario": "Comparing two ways to keep a sender's deduction and a receiver's credit consistent across separate services: two-phase commit (2PC) versus a Saga with compensating actions.",
+    "question": "Why do most high-throughput payment systems favor Saga over 2PC, despite Saga being harder to reason about?",
+    "options": [
+      "2PC requires every participant to hold locks and stay available until a coordinator finishes the whole protocol, creating a blocking dependency between services that doesn't scale well under high concurrency; Saga trades that upfront blocking for eventual consistency plus explicit compensating actions, which fits loosely-coupled, high-throughput services better",
+      "2PC has been fully deprecated and is no longer implemented by any database or messaging system",
+      "Saga provides the exact same strict atomicity guarantees as 2PC, so there's no real tradeoff between them",
+      "2PC is a purely theoretical protocol that has never been used in a real production system"
+    ],
+    "correctIndex": 0,
+    "explanation": "2PC's blocking, lock-holding coordination is exactly what makes it costly at scale — every participant has to wait on the slowest one. Saga accepts a window of temporary inconsistency in exchange for services that don't have to block on each other, which is the trade high-throughput systems are usually willing to make."
+  },
+  {
+    "id": "payment-sync-throughput-limit",
+    "tag": "Scalability",
+    "difficulty": "medium",
+    "scenario": "The naive design — user clicks Pay, API deducts the balance from the database, then returns success, all synchronously in one request — works fine in a demo. At a sustained 10,000 transactions/second, it falls over.",
+    "question": "Why does this fail at scale even if each individual database write is reasonably fast on its own?",
+    "options": [
+      "At high sustained throughput, even small per-request latencies compound into queueing delay once the arrival rate approaches what the database can sustainably process — the fix is to decouple accepting the request from fully completing it (e.g. queue it and settle asynchronously) rather than holding every client connection open for the entire synchronous path",
+      "It fails only because a single database write is inherently too slow to ever be viable at any scale",
+      "It fails purely due to network bandwidth limits between the client and the server, unrelated to the database",
+      "It doesn't actually fail — 10,000 TPS is comfortably within what any single database can always handle synchronously"
+    ],
+    "correctIndex": 0,
+    "explanation": "The problem isn't that any single write is slow — it's that holding a connection open per request until full settlement finishes means the system's total capacity is capped by how fast the slowest step in that synchronous chain can go, for every single request, all at once."
+  }
+]

@@ -1,0 +1,272 @@
+[
+  {
+    "id": "fundamentals-autoconfig",
+    "tag": "Spring Boot Fundamentals",
+    "difficulty": "medium",
+    "scenario": "You add the spring-boot-starter-web dependency to a new project, write zero configuration, and Tomcat, Jackson JSON handling, and the DispatcherServlet all just start working.",
+    "question": "What is actually happening behind the scenes to make this work?",
+    "options": [
+      "Spring Boot scans the classpath at startup and conditionally registers beans for the libraries it finds there — auto-configuration classes guarded by conditions like 'only if this class is on the classpath' or 'only if the user hasn't already defined this bean themselves' — rather than reacting to any tag on the jar itself",
+      "Spring Boot ships pre-built configuration files for every popular library and copies them into your project when you add the dependency",
+      "The starter dependency is a compiler plugin that generates wiring code at build time",
+      "Nothing automatic happens; Tomcat starts itself because it happens to be on the classpath"
+    ],
+    "correctIndex": 0,
+    "explanation": "Auto-configuration is just regular @Configuration classes shipped inside Spring Boot, each guarded by conditional annotations (present on the classpath, not already user-defined, a property set, etc.). Because Jackson and an embedded servlet container are on the classpath and you haven't defined your own beans for them, the matching auto-configuration kicks in and registers sensible defaults you can still override."
+  },
+  {
+    "id": "fundamentals-embedded-server",
+    "tag": "Spring Boot Fundamentals",
+    "difficulty": "easy",
+    "scenario": "Traditional Java web apps built a WAR file and deployed it into a separately-installed, version-matched Tomcat or JBoss instance. A Spring Boot app instead packages an embedded Tomcat inside a single runnable JAR.",
+    "question": "What practical problem does embedding the server actually solve?",
+    "options": [
+      "It makes the JVM itself start faster in general",
+      "The app becomes self-contained and portable — 'the server that runs it ships with it' — so `java -jar app.jar` works the same way on any machine, without a separately installed, version-matched application server to coordinate",
+      "Embedded Tomcat is required because Boot cannot produce a deployable WAR at all",
+      "It removes the need for a JVM to run the application"
+    ],
+    "correctIndex": 1,
+    "explanation": "The core win is deployment simplicity and environment consistency: no separately-managed app server whose version might drift from what you tested against. This is also exactly why Boot apps drop so cleanly into containers — the artifact already knows how to run itself."
+  },
+  {
+    "id": "config-property-order",
+    "tag": "Configuration & Properties",
+    "difficulty": "medium",
+    "scenario": "The same property, server.port, is set in application.yml, as an OS environment variable, and as a command-line argument at startup, all with different values.",
+    "question": "Which one takes effect, and why does that precedence make sense for real deployments?",
+    "options": [
+      "application.yml always wins, since it's the application's own explicit configuration",
+      "Command-line arguments win over environment variables, which win over application.yml — Spring Boot favors the most specific, most recently-supplied override, which matches how a deployment actually injects last-mile config (a Kubernetes env var, a docker run flag) without touching the packaged jar",
+      "All three are merged, and a conflicting value throws a startup exception",
+      "Only one property source is legal per application; the others are silently ignored entirely"
+    ],
+    "correctIndex": 1,
+    "explanation": "This ordering exists so ops/deployment tooling can override packaged defaults from the outside — via env vars in a container, or a CLI flag for a one-off run — without rebuilding or editing the artifact. Understanding *why* the order is that way (outermost, most deployment-specific wins) matters more than memorizing the exact list."
+  },
+  {
+    "id": "config-profiles",
+    "tag": "Configuration & Properties",
+    "difficulty": "easy",
+    "scenario": "The same codebase needs a different datasource URL for dev, test, and prod, without maintaining three near-duplicate copies of the code or branching on an environment check inside Java.",
+    "question": "What problem do Spring profiles actually solve here?",
+    "options": [
+      "They let you package environment-specific property files or bean definitions once, then pick which set is active at startup (e.g. via spring.profiles.active) — moving environment differences into configuration instead of code branches",
+      "They exist only to control logging verbosity per environment",
+      "They require building and shipping a separate artifact per environment",
+      "They replace the need for property files entirely"
+    ],
+    "correctIndex": 0,
+    "explanation": "Profiles are a way of saying 'load this configuration instead of that one' based on an external flag, keeping environment-specific values (URLs, credentials, feature toggles) out of the code path so the same built jar can run correctly in every environment."
+  },
+  {
+    "id": "di-stereotype-annotations",
+    "tag": "Dependency Injection & Beans",
+    "difficulty": "medium",
+    "scenario": "A teammate says @Component, @Service, and @Repository are functionally identical except for the name, so it doesn't matter which one you put on a class.",
+    "question": "Is that actually true? What, if anything, really differs under the hood?",
+    "options": [
+      "True in every respect — Spring treats all three identically; the names are purely documentation for humans",
+      "Mostly true for component scanning (all three register a bean the same way), but @Repository additionally triggers a bean post-processor that translates low-level persistence exceptions (JDBC/Hibernate-specific) into Spring's unchecked DataAccessException hierarchy — a real behavioral difference, not just a naming convention",
+      "@Service beans default to prototype scope while @Component and @Repository default to singleton",
+      "@Repository is mandatory for Spring Data JPA to function; persistence classes cannot use @Component or @Service"
+    ],
+    "correctIndex": 1,
+    "explanation": "All three are meta-annotated with @Component, so component scanning treats them the same for bean registration. The genuinely different piece is @Repository's exception translation — it's a small but real technical difference layered on top of what is otherwise a semantic convention for readability."
+  },
+  {
+    "id": "di-circular-dependency",
+    "tag": "Dependency Injection & Beans",
+    "difficulty": "hard",
+    "scenario": "Bean A takes Bean B as a constructor argument, and Bean B takes Bean A as a constructor argument. The app refuses to start with a circular reference error.",
+    "question": "What does this error actually tell you, and what's the right way to think about fixing it?",
+    "options": [
+      "It's a Spring limitation; permanently wrapping one side in @Lazy is the correct fix",
+      "It's usually a design smell — two beans needing each other through their constructors often means their responsibilities are tangled together; the durable fix is to extract the shared behavior into a third collaborator or otherwise restructure responsibilities, not to paper over the cycle with lazy injection",
+      "Circular dependencies always resolve automatically for constructor injection; this points to an unrelated bug",
+      "Switching both beans to prototype scope resolves the cycle"
+    ],
+    "correctIndex": 1,
+    "explanation": "Constructor injection fails loudly here because Spring needs a fully-constructed instance to satisfy each constructor argument — there's no partially-built object it can hand over the way field/setter injection could via a proxy. @Lazy can make the error go away without fixing the underlying coupling; the more durable fix is usually to redesign so the cycle doesn't exist."
+  },
+  {
+    "id": "di-singleton-scope-state",
+    "tag": "Dependency Injection & Beans",
+    "difficulty": "medium",
+    "scenario": "A @Service class has a mutable instance field that gets set to the current request's user id, and the app is running under normal production load with many concurrent users.",
+    "question": "What breaks here, and why?",
+    "options": [
+      "Nothing breaks — Spring automatically creates a new instance of the bean per HTTP request",
+      "Spring's default bean scope is singleton, so all requests and threads share the exact same instance — that mutable field becomes shared mutable state, and concurrent users can race and overwrite each other's value; per-request state belongs in a local variable, a request-scoped bean, or thread-local-backed context, not a singleton's instance field",
+      "Spring Boot automatically makes every bean thread-safe regardless of how it's written",
+      "The outcome is undefined and depends only on garbage collection timing"
+    ],
+    "correctIndex": 1,
+    "explanation": "Because a normal @Service/@Component is a singleton, storing per-request data on its own fields turns it into shared state across every concurrent request — a classic race condition. This is why beans are generally written to be stateless, with anything request-specific passed as a method parameter or held in request-scoped storage instead."
+  },
+  {
+    "id": "autowiring-ambiguous-bean",
+    "tag": "Autowiring & Web Layer",
+    "difficulty": "medium",
+    "scenario": "An interface PaymentGateway has two implementations registered as beans, StripeGateway and PaypalGateway. A class autowires PaymentGateway directly, and the application fails to start.",
+    "question": "What's actually happening, and what are the real ways to resolve it?",
+    "options": [
+      "Spring picks one implementation arbitrarily at runtime; the startup failure is caused by something unrelated",
+      "Spring can't determine which implementation should satisfy the dependency, so it fails fast at startup rather than guessing — you resolve it by marking one bean as the default, by explicitly naming which one you want, or by restructuring the class to depend on all of them (e.g. a collection) if that's what it actually needs",
+      "You must delete one of the two implementations, since Spring never supports multiple beans implementing the same interface",
+      "Field injection avoids this ambiguity entirely; only constructor injection has this problem"
+    ],
+    "correctIndex": 1,
+    "explanation": "The failure is a deliberate safety behavior — a silent, nondeterministic pick would be far worse than an obvious startup error. The real fix is picking the right resolution strategy for the situation: a sensible default, an explicit choice, or acknowledging the class genuinely needs every implementation."
+  },
+  {
+    "id": "autowiring-constructor-vs-field",
+    "tag": "Autowiring & Web Layer",
+    "difficulty": "easy",
+    "scenario": "A codebase autowires every dependency directly onto private fields, with no constructor at all.",
+    "question": "What's the practical cost of that style compared to constructor injection?",
+    "options": [
+      "None — Spring runs either style with identical runtime behavior in every case",
+      "Field injection lets a class exist in an incomplete state (nothing forces its dependencies to be supplied), hides what a class actually needs from anyone reading its constructor, and makes plain unit testing without a Spring context awkward — constructor injection makes every dependency explicit, required, and immutable, and lets the class be instantiated with a plain `new` in a test",
+      "Field injection is strictly faster at runtime than constructor injection",
+      "Constructor injection cannot be used when a dependency is defined by an interface"
+    ],
+    "correctIndex": 1,
+    "explanation": "The practical difference shows up in testability and readability: a constructor is a visible, enforced contract of what a class needs, and it lets you build the object directly in a unit test without spinning up any Spring machinery — field injection hides that contract and typically forces you into a Spring-backed test just to construct the object."
+  },
+  {
+    "id": "jpa-n-plus-one",
+    "tag": "REST APIs & Spring Data JPA",
+    "difficulty": "medium",
+    "scenario": "An endpoint returns 50 orders, each with a lazily-loaded @OneToMany collection of line items. The logs show one query to fetch the orders, followed by 50 more queries — one per order — to fetch each order's line items.",
+    "question": "What's the right fix here, conceptually?",
+    "options": [
+      "Switch the line items association to eager fetching everywhere, so it's always loaded as one simple global rule",
+      "Fetch the association explicitly in the specific query that needs it — a JOIN FETCH, an entity graph, or a batch fetch size — so the related data comes back in one or a small, bounded number of queries, matched to that particular use case rather than a single blanket eager/lazy setting for the whole entity",
+      "The N+1 problem only occurs with hand-written native SQL, never through JPA repositories",
+      "Increasing the connection pool size fixes it, since the 50 queries can then run in parallel"
+    ],
+    "correctIndex": 1,
+    "explanation": "Making an association eager everywhere just moves the over-fetching problem elsewhere — now every query for an order drags in line items whether it needs them or not, and can create its own N+1 in a different spot. The real fix targets the specific query path that needs the related data and fetches it deliberately in bulk."
+  },
+  {
+    "id": "jpa-repository-proxy",
+    "tag": "REST APIs & Spring Data JPA",
+    "difficulty": "medium",
+    "scenario": "You write `interface OrderRepository extends JpaRepository<Order, Long> {}` with zero method bodies, and findById, save, and a custom findByCustomerId method all work correctly.",
+    "question": "How does calling a method on an interface with no implementation actually execute a database query?",
+    "options": [
+      "Spring Data generates a runtime proxy implementing the interface: well-known methods delegate to a built-in base implementation, while a method like findByCustomerId is parsed from its name at startup and translated into a derived query (or executes a query you've explicitly annotated)",
+      "The interface is compiled directly into bytecode containing embedded SQL",
+      "Hibernate reverse-engineers the database schema and generates matching methods automatically",
+      "Nothing executes; it silently returns empty results until you supply a real implementation"
+    ],
+    "correctIndex": 0,
+    "explanation": "There's no magic method body — Spring Data creates a proxy object at startup that implements the interface, backing standard CRUD methods with a shared implementation and parsing query-method names (or reading @Query) to build the actual query to run for the rest."
+  },
+  {
+    "id": "jpa-pagination",
+    "tag": "REST APIs & Spring Data JPA",
+    "difficulty": "easy",
+    "scenario": "An endpoint that returns 'all orders' starts timing out as the orders table grows into the millions, because every call loads the entire result set into memory before responding.",
+    "question": "What's the right fix, and why does it actually help rather than just moving the problem?",
+    "options": [
+      "Add a Pageable parameter so the query pushes a bounded window (e.g. LIMIT/OFFSET or keyset pagination) down to the database — the database only returns, and the app only ever holds, one page's worth of rows at a time, instead of materializing the whole table in memory and over the network on every call",
+      "Add a cache in front of the endpoint so the expensive query only runs once",
+      "Increase the application's heap size so it can comfortably hold the full result set",
+      "Move the query onto a background thread so the request timeout no longer applies"
+    ],
+    "correctIndex": 0,
+    "explanation": "Pagination doesn't just make the response smaller — it changes what the database and app actually do per request, bounding memory and network transfer to a fixed page size regardless of how large the table grows, which is the part that actually fixes the scaling problem rather than delaying it."
+  },
+  {
+    "id": "tx-self-invocation",
+    "tag": "Transactions, Queries & Actuator",
+    "difficulty": "hard",
+    "scenario": "OrderService.placeOrder() internally calls this.chargeCustomer(), and chargeCustomer() is annotated @Transactional. When chargeCustomer() throws partway through, the transaction does not roll back as expected.",
+    "question": "Why not, conceptually?",
+    "options": [
+      "@Transactional silently doesn't apply to any method that looks 'internal', for security reasons",
+      "Spring's declarative transactions are implemented via a proxy wrapping the bean; a call arriving from outside the bean goes through that proxy (which starts the transaction), but a call from inside the same class via `this.method()` bypasses the proxy entirely and invokes the real method directly, so the transactional advice never runs",
+      "The transaction did roll back correctly; this is purely a misleading log message",
+      "@Transactional only takes effect on methods that return void"
+    ],
+    "correctIndex": 1,
+    "explanation": "This is one of the most commonly-tested Spring gotchas precisely because it reveals whether you understand that Spring AOP (transactions, most @Aspect advice) is proxy-based by default — advice only fires on calls that go through the proxy from outside, not on a method calling a sibling method on itself. The fix is to call through a separate bean, or switch to compile/load-time weaving if self-invocation must be covered."
+  },
+  {
+    "id": "tx-propagation",
+    "tag": "Transactions, Queries & Actuator",
+    "difficulty": "medium",
+    "scenario": "ServiceA's method (no @Transactional) calls ServiceB's method, which is @Transactional with the default propagation. ServiceB writes some rows, then throws partway through.",
+    "question": "With the default propagation behavior, what happens to those writes, and why does that default make sense?",
+    "options": [
+      "ServiceB's writes roll back cleanly: the default propagation means 'join an existing transaction if one is active, otherwise start a new one' — since ServiceA had none active, ServiceB started and owns its own transaction, so it can roll back its own work independently on the exception",
+      "Nothing rolls back, because ServiceA wasn't transactional, so ServiceB's transaction is treated as a no-op too",
+      "The rows are committed permanently regardless of the exception, since ServiceB is a separate service class",
+      "Propagation behavior only applies when both methods live in the same class"
+    ],
+    "correctIndex": 0,
+    "explanation": "The default propagation is designed so each unit of work can safely manage its own transaction boundary when nothing broader is already in progress, while still cooperating (joining rather than nesting a new one) when it's called from within an existing transaction — that's what makes it a sensible default rather than an arbitrary one."
+  },
+  {
+    "id": "actuator-security",
+    "tag": "Transactions, Queries & Actuator",
+    "difficulty": "medium",
+    "scenario": "A team enables Spring Boot Actuator for health checks and monitoring, and ships to production with default settings — publicly exposing endpoints like /actuator/env, /actuator/heapdump, and /actuator/beans on the open internet.",
+    "question": "What's the real risk here, and what's the standard fix before going to production?",
+    "options": [
+      "There's no real risk — actuator endpoints are read-only and can't leak anything sensitive",
+      "Endpoints like /env and /heapdump can expose secrets (API keys, database credentials, session data) and internal application structure to anyone who can reach the port — the fix is to expose only what's genuinely needed publicly (typically just /health), put the rest behind authentication or a separate management port, and never leave sensitive actuator endpoints open to the internet",
+      "Actuator is automatically disabled in production builds, so this scenario can't occur",
+      "Renaming the actuator base path to something obscure is sufficient protection on its own"
+    ],
+    "correctIndex": 1,
+    "explanation": "A heap dump can contain literally anything the app had in memory, including secrets; /env can reveal configuration values outright. Renaming the path is security-through-obscurity, not real access control — the actual fix restricts who can reach these endpoints at all, via authentication and/or network-level separation."
+  },
+  {
+    "id": "testing-webmvctest-vs-springboottest",
+    "tag": "Security, Testing & Microservices",
+    "difficulty": "easy",
+    "scenario": "You want to verify a controller returns the right JSON shape and status codes for a given request, without spinning up the whole application — no real database, no real downstream services.",
+    "question": "Which testing approach fits, and why — conceptually, not just 'pick the smaller-sounding one'?",
+    "options": [
+      "@SpringBootTest, because it's the most complete option and 'more complete' is always the safer choice for a test",
+      "@WebMvcTest, because it loads only the web layer (controllers and MVC infrastructure) and lets you mock out the service layer, so the test stays fast and focused purely on request/response behavior, without needing a real database or the full application context",
+      "The two are interchangeable; the difference is purely a naming convention",
+      "Neither — REST controllers can only be tested by making real HTTP calls against a running server"
+    ],
+    "correctIndex": 1,
+    "explanation": "The real distinction is scope: a full integration test wires the entire application context and is slower but verifies real end-to-end wiring, while a slice test loads only the layer you're actually testing and mocks the rest — the right choice depends on what you're trying to verify, not on which annotation sounds more thorough."
+  },
+  {
+    "id": "security-filter-chain",
+    "tag": "Security, Testing & Microservices",
+    "difficulty": "medium",
+    "scenario": "A request to a protected endpoint without a valid token comes back with a 403, and the controller method's own code never even runs.",
+    "question": "Where did that rejection actually happen, conceptually?",
+    "options": [
+      "Inside the controller method itself, via an early check that Spring Boot auto-generates",
+      "In a chain of servlet filters that Spring Security installs in front of the DispatcherServlet — authentication and authorization are decided before the request ever reaches Spring MVC's routing or your controller code, which is exactly why a security misconfiguration can block (or wrongly allow) a request your controller never gets a chance to see",
+      "Inside the database layer, since permission checks are enforced in SQL",
+      "On the client side, in validation code shipped to the browser"
+    ],
+    "correctIndex": 1,
+    "explanation": "Understanding that Spring Security operates as a filter chain sitting in front of your application logic — not as code your controller calls — explains why security bugs often have nothing to do with the controller code at all, and why debugging an auth issue means looking at filter/security config first."
+  },
+  {
+    "id": "microservices-circuit-breaker",
+    "tag": "Security, Testing & Microservices",
+    "difficulty": "medium",
+    "scenario": "Service A calls Service B synchronously on every request. Service B starts timing out under load, and Service A's threads pile up waiting on B — eventually exhausting Service A's own thread pool and taking it down too, even though Service A's own logic was fine.",
+    "question": "What's the standard pattern to keep one struggling service from cascading failure to everything that calls it?",
+    "options": [
+      "Keep increasing Service A's thread pool so it can absorb more waiting calls indefinitely",
+      "A circuit breaker: after a threshold of failures/timeouts it stops calling B for a cooldown period and fails fast (or falls back) instead of letting every caller thread block on a service that's already struggling — protecting A's own resources and giving B room to recover instead of adding more load onto it",
+      "Retry every failed call immediately and repeatedly until it eventually succeeds",
+      "Have Service A poll Service B's health endpoint before every single request, as a substitute for handling failures when they happen"
+    ],
+    "correctIndex": 1,
+    "explanation": "The core insight is that blocking and endless retries make a struggling downstream service worse, not better — a circuit breaker (Resilience4j, historically Hystrix) trades a slower degraded experience for actually preventing the failure from spreading, by giving up fast and giving the failing service breathing room."
+  }
+]

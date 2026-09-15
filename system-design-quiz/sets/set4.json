@@ -1,0 +1,227 @@
+[
+  {
+    "id": "latency-normal-cpu",
+    "tag": "API Latency",
+    "difficulty": "easy",
+    "scenario": "API latency suddenly increases, but CPU and memory metrics on the service both look completely normal.",
+    "question": "Where do you investigate next, and why doesn't normal CPU/memory rule out a real performance problem?",
+    "options": [
+      "Check what the service is blocked waiting on — network calls to other services or the database, connection/thread pool saturation, GC pause frequency, or lock contention — since a service can be slow while 'idle' on CPU precisely because it's waiting, not computing",
+      "Assume it's a random blip and wait to see if it resolves on its own",
+      "Immediately redeploy the service, since normal CPU/memory proves the code itself must have just changed",
+      "Add more replicas right away, since latency problems are always fixed by horizontal scaling regardless of cause"
+    ],
+    "correctIndex": 0,
+    "explanation": "High latency with low CPU/memory is a strong signal the bottleneck is I/O or contention, not computation — the request is spending its time waiting, not working. Metrics that look 'healthy' at the resource level can hide a very unhealthy request path."
+  },
+  {
+    "id": "kafka-consumer-lag",
+    "tag": "Kafka & Streaming",
+    "difficulty": "medium",
+    "scenario": "Kafka consumer lag keeps climbing even though the consumers report as healthy — no crashes, no restarts, no errors in their logs.",
+    "question": "What's the most likely explanation, and where do you look?",
+    "options": [
+      "'Healthy' doesn't mean 'fast enough' — the consumers are alive but processing more slowly than events are arriving; check per-message processing time, whether consumers are stuck waiting on a slow downstream call, or whether there simply aren't enough consumer instances/partitions to keep up with the produce rate",
+      "Kafka itself must be silently misconfigured to drop messages, which is the only thing that explains rising lag",
+      "Rising lag always means there's packet loss between the producer and the broker",
+      "Consumer lag is a cosmetic metric that doesn't reflect an actual processing problem"
+    ],
+    "correctIndex": 0,
+    "explanation": "Lag is simply produce rate minus consume rate over time — a 'healthy' consumer that's merely too slow (or too few in number) will still show ever-increasing lag. The fix is either speeding up per-message processing or adding consumers/partitions, not treating 'no crashes' as proof nothing's wrong."
+  },
+  {
+    "id": "downstream-service-slowness",
+    "tag": "Service Resilience",
+    "difficulty": "medium",
+    "scenario": "One downstream service becomes slow, and that slowness starts dragging down your entire application's performance, even for requests that don't strictly depend on it.",
+    "question": "How do you prevent one slow dependency from taking down everything else?",
+    "options": [
+      "Isolate calls to that dependency with timeouts and a circuit breaker that fails fast once it's clearly struggling, and ideally give it its own bounded resource pool (a bulkhead) so its slowness can't exhaust threads/connections shared by unrelated request paths",
+      "Increase the global thread pool size so there's simply more room to wait on the slow dependency",
+      "Remove timeouts entirely so requests always eventually complete instead of failing",
+      "Route all traffic to every dependency through one single shared, unbounded queue"
+    ],
+    "correctIndex": 0,
+    "explanation": "The real danger is resource exhaustion spreading across unrelated code paths — if every request path shares the same thread pool, one slow dependency can starve requests that never even touch it. Isolating the failure (bulkhead) and giving up on it quickly (circuit breaker) contains the damage."
+  },
+  {
+    "id": "idempotency-key-ttl",
+    "tag": "Idempotency",
+    "difficulty": "medium",
+    "scenario": "After adding idempotency keys to make payment retries safe, the table storing those keys grows without bound, cluttered with keys for requests that completed successfully months ago.",
+    "question": "What's a sensible mitigation, and why is it usually safe?",
+    "options": [
+      "Expire/evict idempotency keys after a bounded window (e.g. 24-48 hours) sized to how long a client's retries could realistically still occur — a request arriving that much later isn't a plausible retry of the original attempt anymore",
+      "Never expire idempotency keys under any circumstances, since any expiration risks a future duplicate charge",
+      "Keep idempotency keys only in application memory, since persisting them isn't actually necessary",
+      "Replace the idempotency key mechanism with a single global lock covering the entire payments table"
+    ],
+    "correctIndex": 0,
+    "explanation": "Idempotency keys only need to survive as long as a legitimate retry could plausibly still arrive. Bounding that window with a TTL keeps the store manageable without reintroducing the duplicate-processing risk the keys exist to prevent."
+  },
+  {
+    "id": "db-connection-exhaustion",
+    "tag": "Database Connections",
+    "difficulty": "medium",
+    "scenario": "Database connections get exhausted during peak traffic, and new requests start failing while waiting for a connection to free up.",
+    "question": "What would you check first, beyond just enlarging the connection pool?",
+    "options": [
+      "Whether slow queries or long-held transactions are keeping connections checked out longer than necessary, whether the pool is actually sized for real peak concurrency, and whether connections are being leaked (opened but never returned) rather than assuming a bigger pool is the whole fix",
+      "Immediately double the connection pool size, since that's always the complete fix on its own",
+      "Assume the database instance itself is undersized and needs to be replaced",
+      "Restart the application, since connection exhaustion is expected to self-resolve after a restart"
+    ],
+    "correctIndex": 0,
+    "explanation": "A bigger pool can mask a leak or a slow-query problem for a while, but if connections are being held too long (or never released), you'll hit exhaustion again at a slightly higher load — finding what's actually holding connections open is the fix that lasts."
+  },
+  {
+    "id": "random-500-no-logs",
+    "tag": "Debugging Production",
+    "difficulty": "medium",
+    "scenario": "Your service returns 500 errors intermittently, but there's nothing obviously wrong in the application logs for those failed requests.",
+    "question": "How do you debug it?",
+    "options": [
+      "Look past clean application-level exception logging — check for errors swallowed by a generic error handler, failures introduced by infrastructure (timeouts, OOM kills, sidecar/proxy errors) that never reach your app's own logs, and add correlation IDs/tracing so you can pull the full context of one specific failing request",
+      "Conclude it's a transient network blip and not worth investigating further",
+      "Assume the logging framework itself must be broken and replace it",
+      "Suppress 500 responses so users stop seeing the errors"
+    ],
+    "correctIndex": 0,
+    "explanation": "'No errors in the logs' often means the failure happened somewhere your logging doesn't reach — a layer below or around your application code. Correlating a specific failing request across every layer (via tracing/correlation IDs) is what surfaces failures your app-level logs were never going to show."
+  },
+  {
+    "id": "retry-duplicate-transactions",
+    "tag": "Idempotency",
+    "difficulty": "easy",
+    "scenario": "A retry mechanism, meant to make requests more reliable, starts creating duplicate transactions instead.",
+    "question": "What's actually wrong here?",
+    "options": [
+      "The operation being retried isn't idempotent — a naive retry just re-executes the whole side-effecting operation again instead of recognizing 'this exact attempt already happened'; the fix is pairing retries with an idempotency key/check, not removing retries altogether",
+      "The retry mechanism itself is fundamentally broken and should simply be deleted",
+      "Duplicates always mean the network layer is corrupting request payloads",
+      "This can only happen when a human manually triggers the retry, never when it's automatic"
+    ],
+    "correctIndex": 0,
+    "explanation": "Retries are a good idea for reliability, but only when the retried operation is safe to repeat. The fix isn't fewer retries — it's making the operation itself recognize and short-circuit a repeat of the same logical attempt."
+  },
+  {
+    "id": "scheduled-job-multiple-instances",
+    "tag": "Distributed Scheduling",
+    "difficulty": "medium",
+    "scenario": "A scheduled job that used to run once on schedule now executes multiple times after the service was scaled to run on multiple instances.",
+    "question": "How do you fix it?",
+    "options": [
+      "Use a distributed lock or leader-election mechanism so only one instance actually runs the job at a given trigger time — a naive scheduled task has no built-in awareness that other copies of the same service exist",
+      "Increase the schedule interval so overlapping runs become statistically rare",
+      "Turn off horizontal scaling entirely for any service that has a scheduled job",
+      "Have each instance check a local in-memory flag before running the job"
+    ],
+    "correctIndex": 0,
+    "explanation": "Every instance has its own separate memory, so a local flag can't coordinate anything across instances — that option just recreates the same bug in a subtler form. A shared, distributed lock (or explicit leader election) is what actually gives 'only one runs it' a real mechanism to enforce."
+  },
+  {
+    "id": "pods-scaling-no-latency-improvement",
+    "tag": "Horizontal Scaling",
+    "difficulty": "medium",
+    "scenario": "You add more pods to handle load, but API latency doesn't improve at all.",
+    "question": "What could the bottleneck be?",
+    "options": [
+      "A shared downstream resource that doesn't scale along with pod count — a single database, a fixed-size connection pool, or a downstream dependency that's itself become the real bottleneck — so more pods just means more requests queuing up behind the same choke point",
+      "Kubernetes pods are inherently latency-bound no matter what they're doing",
+      "If more pods don't help, the deployment configuration itself must be broken",
+      "The load balancer can only ever send traffic to one pod at a time regardless of pod count"
+    ],
+    "correctIndex": 0,
+    "explanation": "Horizontal scaling only helps the part of the system that's actually the bottleneck. If every pod ultimately funnels through the same database or fixed-size pool, adding more pods just adds more contention for that same shared resource."
+  },
+  {
+    "id": "distributed-tracing-7-services",
+    "tag": "Distributed Tracing",
+    "difficulty": "easy",
+    "scenario": "A single request passes through 7 different microservices before a response comes back.",
+    "question": "How would you trace that request end-to-end to understand where time is being spent?",
+    "options": [
+      "Propagate one correlation/trace ID through every hop (distributed tracing, via a shared trace context header), so each service's logs and spans can be stitched back together into a single end-to-end timeline of the request's path",
+      "Manually grep each service's logs around the approximate timestamp and try to match entries by eye",
+      "This is only possible if all 7 services are rewritten in the same programming language",
+      "Add more logging statements to each service, without any shared identifier connecting them"
+    ],
+    "correctIndex": 0,
+    "explanation": "Without a shared trace ID, correlating log lines across 7 independently-deployed services by timestamp alone is unreliable and doesn't scale. Distributed tracing exists specifically to make a multi-hop request's full path and timing visible as one coherent picture."
+  },
+  {
+    "id": "cache-stale-data",
+    "tag": "Caching",
+    "difficulty": "easy",
+    "scenario": "A cache clearly improves performance, but it starts returning stale data to users after the underlying data changes.",
+    "question": "How would you handle it?",
+    "options": [
+      "Pick an invalidation strategy suited to how the underlying data actually changes — invalidate/update the cache entry on writes, set a TTL matched to how much staleness is tolerable, or use event-driven invalidation — rather than treating 'add a cache' as a one-time decision with no ongoing invalidation story",
+      "Remove the cache entirely, since any staleness means caching this data was a mistake",
+      "Increase the cache size so old entries get evicted sooner on their own",
+      "Only ever cache data that never changes, giving up caching's benefit everywhere else"
+    ],
+    "correctIndex": 0,
+    "explanation": "Every cache needs an invalidation story that matches its data's change pattern — how a cache goes stale (and for how long that's acceptable) should drive the choice between write-time invalidation, a TTL, or event-driven updates, not a single blanket rule."
+  },
+  {
+    "id": "service-down-critical-transaction-recovery",
+    "tag": "Failure Recovery",
+    "difficulty": "medium",
+    "scenario": "One service goes down midway through a critical, multi-step transaction that spans several services.",
+    "question": "How should the overall system recover once that service comes back?",
+    "options": [
+      "Design the transaction so partial progress is recoverable — durable state or checkpoints for what's already completed, compensating actions for what needs undoing, and retry/resume logic once the failed service is back — rather than assuming every step will always run start-to-finish uninterrupted",
+      "Manually re-run the entire transaction from the very beginning, discarding whatever had already succeeded",
+      "Prevent the scenario entirely by ensuring no service is ever allowed to go down",
+      "Treat this as a concern unique to financial transactions, not something other critical workflows need to handle"
+    ],
+    "correctIndex": 0,
+    "explanation": "Multi-step, multi-service transactions need to assume a step can fail partway through as a normal case, not an edge case — recoverable state and explicit compensation/resume logic is what lets the system pick back up correctly instead of ending up in an inconsistent half-done state."
+  },
+  {
+    "id": "kafka-duplicate-event",
+    "tag": "Kafka & Streaming",
+    "difficulty": "easy",
+    "scenario": "Kafka delivers the exact same event to a consumer twice.",
+    "question": "How would you handle duplicate processing?",
+    "options": [
+      "Make the consumer idempotent — track processed event IDs (or use a natural dedup key from the event itself) and skip anything already handled — since Kafka's at-least-once delivery model makes occasional duplicates an expected possibility, not a bug to eliminate at the transport layer",
+      "Switch to a different message broker that claims to never redeliver an event",
+      "Ignore duplicates, since Kafka guarantees no message is ever delivered more than once",
+      "Have the producer disable all of its own retries so duplicates can never originate in the first place"
+    ],
+    "correctIndex": 0,
+    "explanation": "At-least-once delivery is a deliberate trade-off most streaming systems make because it's simpler and safer than risking silently dropped messages. The standard response is dedup on the consumer side, not fighting the broker's delivery guarantee."
+  },
+  {
+    "id": "staging-vs-production-diff",
+    "tag": "Environment Parity",
+    "difficulty": "easy",
+    "scenario": "Production is slow, but the exact same code runs perfectly fine in staging.",
+    "question": "What differences would you verify?",
+    "options": [
+      "Data volume/scale, real traffic patterns and concurrency, configuration differences (connection pool sizes, timeouts, feature flags), and infrastructure differences (network topology, resource limits) between the two environments — 'works in staging' often just means staging never hit the same scale or config gap",
+      "Assume it's random noise, since staging and production should always behave identically by definition",
+      "Rebuild staging as an exact byte-for-byte copy of production hardware, as the only possible fix",
+      "Conclude the code itself must have a bug that only manifests specifically in production builds"
+    ],
+    "correctIndex": 0,
+    "explanation": "Staging passing usually just means staging didn't reproduce whatever production-specific condition is triggering the slowness — data scale, real concurrent traffic, and subtle config drift between environments are the usual suspects, not the application code diverging between two identical deployments."
+  },
+  {
+    "id": "timeout-under-load-first-step",
+    "tag": "Debugging Production",
+    "difficulty": "easy",
+    "scenario": "Your service suddenly starts timing out under load, after running fine at lower traffic.",
+    "question": "What's the first thing you'd investigate?",
+    "options": [
+      "Where the time is actually going once load increases — thread pool/connection pool saturation, a downstream dependency slowing down, GC pause frequency, or lock contention — using metrics/tracing to find the actual cause, since 'timing out under load' has several distinct possible root causes that all look identical from the outside",
+      "Immediately raise the timeout value so requests stop failing outright",
+      "Assume it's always the database and add an index somewhere without confirming that first",
+      "Restart the service preemptively before investigating anything"
+    ],
+    "correctIndex": 0,
+    "explanation": "Timeouts under load are a symptom with many possible causes that present identically to the caller — the only way to fix the right thing is to find out, with actual data, what's saturating first, rather than guessing or masking the symptom by raising the timeout."
+  }
+]

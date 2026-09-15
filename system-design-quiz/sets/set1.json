@@ -1,0 +1,182 @@
+[
+  {
+    "id": "url-shortener-access-pattern",
+    "tag": "URL Shortener",
+    "difficulty": "easy",
+    "scenario": "You're designing a bit.ly-style URL shortener. Every long URL is shortened once, but the resulting short link can be clicked (and redirected) millions of times over its life.",
+    "question": "Given this write-once, read-millions-of-times pattern, what's the right storage/lookup design for resolving a short code to its long URL?",
+    "options": [
+      "A simple key-value lookup (short_code -> long_url), backed by a cache in front for the hottest links",
+      "A full-text search index over the long URLs",
+      "A message queue sitting between the redirect endpoint and the database",
+      "Sharding by a hash of the long URL, so every redirect requires scatter-gather across shards"
+    ],
+    "correctIndex": 0,
+    "explanation": "Lookups are always by exact short_code, and reads dwarf writes — that's a textbook key-value access pattern. A simple keyed lookup (SQL primary key or KV store) plus a cache for hot links serves this cheaply. Search indexing, queues, and hash-based sharding all solve different problems and add complexity this access pattern doesn't need."
+  },
+  {
+    "id": "url-shortener-encoding",
+    "tag": "URL Shortener",
+    "difficulty": "easy",
+    "scenario": "You need to generate unique 7-character short codes for millions of URLs per day, and you want to avoid checking the database for collisions on every single write.",
+    "question": "Which approach best guarantees uniqueness without a collision check on write?",
+    "options": [
+      "Base62-encode a monotonically increasing unique ID (e.g. from a counter or distributed ID generator) into a short code",
+      "MD5-hash the long URL and truncate the hash to 7 characters",
+      "Generate 7 random characters and retry if the database says it's taken",
+      "Use the URL's domain name as the short code"
+    ],
+    "correctIndex": 0,
+    "explanation": "Base62-encoding a unique, ever-increasing ID is unique by construction — no lookup needed before writing. Truncated hashes can collide, and random-plus-retry means occasional extra round trips under load; both need collision handling that counter-based encoding avoids entirely."
+  },
+  {
+    "id": "url-shortener-redirect-type",
+    "tag": "URL Shortener",
+    "difficulty": "medium",
+    "scenario": "You're choosing between a 301 (permanent) and 302 (temporary) redirect for the shortener's redirect endpoint. You also want to log every click for analytics.",
+    "question": "Which status code fits, and why?",
+    "options": [
+      "301 — browsers and CDNs cache it, so the browser may resolve later clicks itself without ever hitting your server, silently breaking click analytics",
+      "302 — signals 'don't cache this', so every click still passes through your server and can be logged",
+      "200 with a `<meta refresh>` tag — caches nothing and logs nothing extra",
+      "It doesn't matter; both codes behave identically for analytics"
+    ],
+    "correctIndex": 1,
+    "explanation": "A 301 invites aggressive caching — once a browser or CDN caches the redirect target, it may stop asking your server at all, so you lose visibility into repeat clicks. 302 tells clients not to cache it, so every click keeps hitting your server where you can log it, at the cost of a bit more redirect traffic."
+  },
+  {
+    "id": "notification-fanout",
+    "tag": "Notification System",
+    "difficulty": "easy",
+    "scenario": "When an order is confirmed, users need an email, an SMS, and a push notification. Right now the order service calls each of the three providers directly, inline, before responding.",
+    "question": "What's a standard way to decouple the order service so a new channel can be added later without touching its code?",
+    "options": [
+      "Publish one 'order confirmed' event to a pub/sub topic, and have each channel consume it from its own dedicated queue",
+      "Add another inline call and if-statement to the order service for each new channel",
+      "Have each channel's service poll the order service's database directly",
+      "Combine all three provider calls into a single shared retry loop inside the order service"
+    ],
+    "correctIndex": 0,
+    "explanation": "Fan-out publish/subscribe decouples the producer from consumers: the order service emits one event and returns, and each channel has its own queue/consumer reacting independently. Adding a channel becomes 'add a new subscriber' — the order service's code never changes."
+  },
+  {
+    "id": "notification-per-channel-latency",
+    "tag": "Notification System",
+    "difficulty": "medium",
+    "scenario": "Building on the fan-out design: push notifications need to feel near-instant, while email is fine arriving within a few minutes. If the push provider goes down temporarily, the other channels shouldn't be delayed or blocked.",
+    "question": "How should this be handled?",
+    "options": [
+      "Route every channel through the same queue and worker pool with one shared timeout",
+      "Give each channel its own queue and consumer, each tuned with its own retry/backoff and priority for its own latency needs",
+      "Slow email down to match push so all channels feel consistent",
+      "Process channels strictly in order from most to least latency-tolerant, one at a time"
+    ],
+    "correctIndex": 1,
+    "explanation": "Per-channel queues isolate failures and let each channel's consumer be tuned independently — a stuck push provider backs up only the push queue, while email keeps flowing on its own schedule. A shared queue/timeout couples channels together, so one slow or failing provider drags down the rest."
+  },
+  {
+    "id": "rate-limiter-distributed",
+    "tag": "Rate Limiting",
+    "difficulty": "medium",
+    "scenario": "An API enforces 100 requests/minute per API key. It runs behind a load balancer across 5 stateless app servers, and each server currently tracks the counter in its own local memory — so a client spreading requests evenly across servers can actually get up to 500 requests/minute.",
+    "question": "What's the standard fix to enforce the limit correctly across all 5 servers?",
+    "options": [
+      "Store the counter in a shared store (e.g. Redis) using INCR + EXPIRE per key per window, so every server checks the same counter",
+      "Lower each server's local limit to 20 requests/minute",
+      "Make the load balancer sticky per API key so each client always hits the same server",
+      "Have each server query the other 4 servers for their counts before allowing a request"
+    ],
+    "correctIndex": 0,
+    "explanation": "Local in-memory counters are blind to traffic hitting other servers. A shared Redis counter (INCR + EXPIRE per window) gives every server the same source of truth, so the limit holds regardless of which server handles a given request — without the added latency of servers polling each other, or the fragility of relying on sticky routing."
+  },
+  {
+    "id": "debug-slow-api-first-step",
+    "tag": "Debugging Under Load",
+    "difficulty": "easy",
+    "scenario": "Users report the API has gotten noticeably slower during peak hours over the past week. No code has been deployed recently.",
+    "question": "What's the right first step, before touching any code?",
+    "options": [
+      "Immediately spin up more application server instances",
+      "Check metrics/observability — latency percentiles, error rates, CPU, DB, and queue metrics — to find where the time is actually going",
+      "Rewrite the endpoint that seems slowest based on intuition",
+      "Restart all servers in case of a memory leak"
+    ],
+    "correctIndex": 1,
+    "explanation": "Without data, any fix is a guess. Checking dashboards/tracing/metrics first narrows down whether it's the database, a downstream dependency, GC pauses, or something else — and the fix should target what the data actually shows, not what seems intuitively slow."
+  },
+  {
+    "id": "debug-slow-api-db",
+    "tag": "Debugging Under Load",
+    "difficulty": "medium",
+    "scenario": "Metrics point to database query latency spiking during peak hours, and the app's connection pool is maxed out with requests queueing for a free connection.",
+    "question": "What's the most direct next diagnostic step?",
+    "options": [
+      "Increase the connection pool size until the queueing goes away",
+      "Run EXPLAIN ANALYZE on the slow queries to check for a missing index or bad query plan — a bigger pool just lets more slow queries run at once",
+      "Switch the database to a NoSQL store",
+      "Put a CDN in front of the database"
+    ],
+    "correctIndex": 1,
+    "explanation": "A maxed connection pool during slow queries is usually a symptom, not the cause — connections are held longer because the queries themselves are slow. EXPLAIN ANALYZE reveals whether it's a missing index or a bad plan; just widening the pool lets more slow queries run concurrently and can make load on the database worse."
+  },
+  {
+    "id": "monolith-strangler-fig",
+    "tag": "Monolith to Microservices",
+    "difficulty": "easy",
+    "scenario": "Leadership wants to break a large monolith into microservices, but the business can't tolerate downtime or a multi-month freeze on new features during the migration.",
+    "question": "Which migration strategy fits this constraint?",
+    "options": [
+      "Big-bang rewrite: freeze the monolith, rebuild everything as microservices, then cut over all at once",
+      "Strangler Fig: incrementally route specific pieces of functionality to new services behind a facade/proxy, shrinking the monolith piece by piece while it keeps running",
+      "Duplicate the entire monolith and call the copy a 'microservice'",
+      "Keep the monolith untouched and only build brand-new features as microservices"
+    ],
+    "correctIndex": 1,
+    "explanation": "The Strangler Fig pattern replaces the monolith incrementally: a routing layer sends traffic for one capability at a time to a new service once it's ready, while the rest keeps running on the monolith. This avoids the all-or-nothing risk and long feature freeze that a big-bang rewrite demands."
+  },
+  {
+    "id": "monolith-bounded-contexts",
+    "tag": "Monolith to Microservices",
+    "difficulty": "medium",
+    "scenario": "You're splitting an e-commerce monolith and need to decide service boundaries around Orders, Inventory, and Payments — all of which currently share one database.",
+    "question": "What's the guiding principle for drawing these boundaries and splitting the data?",
+    "options": [
+      "Split by technical layer — one service for all controllers, another for all database access",
+      "Split along bounded contexts (Orders, Inventory, Payments as separate domains), each owning its own database, talking to the others only through APIs/events",
+      "Keep one shared database and just split the code into separate deployable processes",
+      "Split arbitrarily based on team headcount"
+    ],
+    "correctIndex": 1,
+    "explanation": "Bounded contexts group the logic and data that change together for the same business reason. Giving each context its own database (database-per-service) prevents hidden coupling through shared tables, forcing cross-service interaction to happen explicitly through APIs or events instead of silently through shared data."
+  },
+  {
+    "id": "consistency-saga",
+    "tag": "Cross-Service Consistency",
+    "difficulty": "medium",
+    "scenario": "Placing an order requires three steps, each owned by a different service with its own database: reserve inventory, charge payment, create shipment. There's no single database transaction that can span all three.",
+    "question": "What pattern handles this without a distributed transaction?",
+    "options": [
+      "A two-phase commit (2PC) across all three databases",
+      "A Saga: each step runs as its own local transaction, and if a later step fails, prior steps are undone via compensating actions — coordinated centrally or via services reacting to each other's events",
+      "Keep retrying the whole order until all three steps happen to succeed together",
+      "Only accept the order if all three services happen to be online at the exact same moment"
+    ],
+    "correctIndex": 1,
+    "explanation": "2PC requires tight locking coordination across databases and doesn't scale well, and many systems (message brokers, several databases) don't support it. A Saga instead treats each step as an independent local transaction and defines compensating actions (e.g. release the inventory reservation, refund the payment) to unwind prior steps if a later one fails."
+  },
+  {
+    "id": "consistency-outbox",
+    "tag": "Cross-Service Consistency",
+    "difficulty": "medium",
+    "scenario": "The order service saves a new order to its database and also needs to publish an 'order created' event to a message broker. If it crashes between the two, the event can be lost — or if it publishes first and the database write then fails, consumers get a 'phantom' event for an order that doesn't exist. Consumers also occasionally see the same event delivered twice.",
+    "question": "What pattern addresses the dual-write problem here, and what should consumers also do?",
+    "options": [
+      "Write to the database and publish the event in the same request, and just make the publish call fast enough that the gap is unlikely to matter",
+      "Transactional Outbox: write the event into an outbox table as part of the same database transaction as the order, then have a separate process relay it from the outbox to the broker; consumers should also be idempotent to safely handle occasional duplicate delivery",
+      "Only publish the event, and reconstruct the order later from the event if needed",
+      "Have the consumer poll the order service's database directly instead of consuming events at all"
+    ],
+    "correctIndex": 1,
+    "explanation": "The Transactional Outbox pattern writes the event into the same database transaction as the business change, so the order and its event succeed or fail together atomically; a separate relay process then delivers it from the outbox to the broker. Because that delivery is still at-least-once, consumers should be idempotent (e.g. via a dedup key) so an occasional duplicate delivery causes no harm."
+  }
+]
