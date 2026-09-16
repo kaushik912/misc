@@ -166,8 +166,11 @@
     font-size:.62rem;
     font-weight:600;
     color:var(--muted);
+    cursor:pointer;
     transition:all .25s ease;
   }
+  .node:hover{ border-color:var(--accent); }
+  .node:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .node.current{ border-color:var(--accent); color:var(--accent-ink); box-shadow:0 0 0 4px var(--accent-soft); }
   .node.correct{ border-color:var(--good); background:var(--good); color:#fff; }
   .node.incorrect{ border-color:var(--bad); background:var(--bad); color:#fff; }
@@ -372,6 +375,7 @@ let QUESTIONS = [];
 let idx = 0;
 let score = 0;
 let answered = [];
+let selected = [];
 let locked = false;
 
 const trackEl = document.getElementById('track');
@@ -401,7 +405,9 @@ async function loadSet(setId){
     return;
   }
   localStorage.setItem(LAST_SET_KEY, set.id);
-  idx = 0; score = 0; answered = new Array(QUESTIONS.length).fill(null);
+  idx = 0; score = 0;
+  answered = new Array(QUESTIONS.length).fill(null);
+  selected = new Array(QUESTIONS.length).fill(null);
   renderTrack(); renderScore(); renderQuestion();
 }
 
@@ -414,7 +420,7 @@ function renderTrack(){
     if (answered[i] === true) cls += ' correct';
     else if (answered[i] === false) cls += ' incorrect';
     else if (i === idx) cls += ' current';
-    html += `<div class="${cls}" title="${q.tag}">${i+1}</div>`;
+    html += `<div class="${cls}" data-i="${i}" role="button" tabindex="0" title="Jump to: ${q.tag}">${i+1}</div>`;
     if (i < QUESTIONS.length - 1){
       const done = answered[i] !== null;
       html += `<div class="wire${done ? ' done' : ''}"></div>`;
@@ -422,6 +428,23 @@ function renderTrack(){
   });
   html += '</div>';
   trackEl.innerHTML = html;
+
+  trackEl.querySelectorAll('.node').forEach(node=>{
+    node.addEventListener('click', ()=>goToQuestion(parseInt(node.dataset.i,10)));
+    node.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        goToQuestion(parseInt(node.dataset.i,10));
+      }
+    });
+  });
+}
+
+function goToQuestion(i){
+  if (i === idx) return;
+  idx = i;
+  renderTrack();
+  renderQuestion();
 }
 
 function renderScore(){
@@ -449,9 +472,14 @@ function renderQuestion(){
     <div id="explainSlot"></div>
   `;
 
-  document.querySelectorAll('.option').forEach(btn=>{
-    btn.addEventListener('click', ()=>selectOption(parseInt(btn.dataset.i,10)));
-  });
+  if (selected[idx] !== null){
+    locked = true;
+    showAnswerState(selected[idx], answered[idx]);
+  } else {
+    document.querySelectorAll('.option').forEach(btn=>{
+      btn.addEventListener('click', ()=>selectOption(parseInt(btn.dataset.i,10)));
+    });
+  }
 }
 
 function selectOption(i){
@@ -460,8 +488,16 @@ function selectOption(i){
   const q = QUESTIONS[idx];
   const correct = i === q.correctIndex;
   answered[idx] = correct;
+  selected[idx] = i;
   if (correct) score++;
 
+  showAnswerState(i, correct);
+  renderTrack();
+  renderScore();
+}
+
+function showAnswerState(i, correct){
+  const q = QUESTIONS[idx];
   document.querySelectorAll('.option').forEach((btn, bi)=>{
     btn.disabled = true;
     if (bi === q.correctIndex){
@@ -487,9 +523,6 @@ function selectOption(i){
     if (idx === QUESTIONS.length - 1) renderResults();
     else { idx++; renderTrack(); renderQuestion(); }
   });
-
-  renderTrack();
-  renderScore();
 }
 
 function renderResults(){
@@ -523,7 +556,9 @@ function renderResults(){
 }
 
 function restart(){
-  idx = 0; score = 0; answered = new Array(QUESTIONS.length).fill(null);
+  idx = 0; score = 0;
+  answered = new Array(QUESTIONS.length).fill(null);
+  selected = new Array(QUESTIONS.length).fill(null);
   renderTrack(); renderScore(); renderQuestion();
 }
 
