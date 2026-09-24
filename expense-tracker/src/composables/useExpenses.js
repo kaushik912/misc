@@ -9,6 +9,7 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
 export function useExpenses(userRef) {
   const expenses = ref([]);
   const currentMonth = ref(null); // { year, month }
+  const isLoading = ref(false);
 
   const monthLabel = computed(() =>
     currentMonth.value
@@ -21,10 +22,15 @@ export function useExpenses(userRef) {
   );
 
   async function loadMockExpenses() {
-    const res = await fetch("mock_expenses.json");
-    const data = await res.json();
-    currentMonth.value = { year: 2025, month: 8 };
-    expenses.value = data.map((e, i) => ({ id: `mock-id-${i}`, ...e }));
+    isLoading.value = true;
+    try {
+      const res = await fetch("mock_expenses.json");
+      const data = await res.json();
+      currentMonth.value = { year: 2025, month: 8 };
+      expenses.value = data.map((e, i) => ({ id: `mock-id-${i}`, ...e }));
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   async function loadExpenses() {
@@ -37,14 +43,19 @@ export function useExpenses(userRef) {
     const endYear = month === 12 ? year + 1 : year;
     const endDate = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
 
-    const snapshot = await db.collection("expenses")
-      .where("uid", "==", user.uid)
-      .where("date", ">=", startDate)
-      .where("date", "<", endDate)
-      .orderBy("date", "desc")
-      .get();
+    isLoading.value = true;
+    try {
+      const snapshot = await db.collection("expenses")
+        .where("uid", "==", user.uid)
+        .where("date", ">=", startDate)
+        .where("date", "<", endDate)
+        .orderBy("date", "desc")
+        .get();
 
-    expenses.value = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      expenses.value = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   function initMonth() {
@@ -97,6 +108,7 @@ export function useExpenses(userRef) {
     currentMonth,
     monthLabel,
     total,
+    isLoading,
     loadMockExpenses,
     initMonth,
     prevMonth,
