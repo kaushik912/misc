@@ -1,11 +1,12 @@
 <script setup>
-defineProps({ expenses: Array });
+defineProps({ expenses: Array, isLoading: Boolean });
 defineEmits(["edit", "delete"]);
 </script>
 
 <template>
   <h3>Transactions</h3>
-  <table>
+  <p v-if="isLoading" class="loading-text">Loading…</p>
+  <table v-else>
     <thead>
       <tr>
         <th>Date</th>

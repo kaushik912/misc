@@ -131,6 +131,13 @@ tbody tr td:last-child {
   padding-left: 0;
 }
 
+.loading-text {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 16px;
+  text-align: center;
+}
+
 .totals {
   margin-top: 16px;
   padding: 16px;

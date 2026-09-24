@@ -12,7 +12,7 @@ import PasswordModal from "./components/PasswordModal.vue";
 
 const { user, authError, login, logout } = useAuth();
 const {
-  expenses, monthLabel, total,
+  expenses, monthLabel, total, isLoading,
   loadMockExpenses, initMonth, prevMonth, nextMonth, saveExpense, deleteExpense,
 } = useExpenses(user);
 
@@ -75,7 +75,7 @@ function openPassword() {
     <div class="totals">
       <h4>Selected Month Total: Rs.<span>{{ total.toFixed(2) }}</span></h4>
     </div>
-    <ExpenseList :expenses="expenses" @edit="openEdit" @delete="onDelete" />
+    <ExpenseList :expenses="expenses" :is-loading="isLoading" @edit="openEdit" @delete="onDelete" />
 
     <ExpenseModal v-if="editingExpense" :expense="editingExpense" @close="editingExpense = null" @save="onSave" />
     <PasswordModal v-if="showPasswordModal" @close="showPasswordModal = false" />
