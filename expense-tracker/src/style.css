@@ -125,10 +125,10 @@ tbody tr td:nth-child(3) {
 }
 
 tbody tr td:last-child {
-  width: 100%;
   display: flex;
-  gap: 8px;
-  padding-top: 0;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 0;
 }
 
 .totals {
@@ -181,12 +181,18 @@ tbody tr td:last-child {
 }
 
 .edit-btn, .delete-btn {
-  padding: 8px 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
   cursor: pointer;
   border-radius: 8px;
-  width: auto;
-  flex: 1;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
 }
 
 .edit-btn {
