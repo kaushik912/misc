@@ -10,6 +10,7 @@ export function useExpenses(userRef) {
   const expenses = ref([]);
   const currentMonth = ref(null); // { year, month }
   const isLoading = ref(false);
+  const monthCache = new Map(); // "year-month" -> expenses array
 
   const monthLabel = computed(() =>
     currentMonth.value
@@ -38,6 +39,13 @@ export function useExpenses(userRef) {
     if (!user || !currentMonth.value) return;
 
     const { year, month } = currentMonth.value;
+    const cacheKey = `${year}-${month}`;
+
+    if (monthCache.has(cacheKey)) {
+      expenses.value = monthCache.get(cacheKey);
+      return;
+    }
+
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const endMonth = month === 12 ? 1 : month + 1;
     const endYear = month === 12 ? year + 1 : year;
@@ -52,7 +60,9 @@ export function useExpenses(userRef) {
         .orderBy("date", "desc")
         .get();
 
-      expenses.value = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const result = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      monthCache.set(cacheKey, result);
+      expenses.value = result;
     } finally {
       isLoading.value = false;
     }
@@ -95,11 +105,13 @@ export function useExpenses(userRef) {
     } else {
       await db.collection("expenses").add({ uid: user.uid, amount, date, category });
     }
+    monthCache.clear();
     await loadExpenses();
   }
 
   async function deleteExpense(id) {
     await db.collection("expenses").doc(id).delete();
+    monthCache.clear();
     await loadExpenses();
   }
 
