@@ -1,5 +1,5 @@
 <script setup>
-defineProps({ expenses: Array, total: Number });
+defineProps({ expenses: Array });
 defineEmits(["edit", "delete"]);
 </script>
 
@@ -20,14 +20,10 @@ defineEmits(["edit", "delete"]);
         <td>{{ parseFloat(e.amount).toFixed(2) }}</td>
         <td>{{ e.category }}</td>
         <td>
-          <button class="edit-btn" @click="$emit('edit', e.id)">Edit</button>
-          <button class="delete-btn" @click="$emit('delete', e.id)">Delete</button>
+          <button class="edit-btn" title="Edit" aria-label="Edit" @click="$emit('edit', e.id)">✏️</button>
+          <button class="delete-btn" title="Delete" aria-label="Delete" @click="$emit('delete', e.id)">🗑️</button>
         </td>
       </tr>
     </tbody>
   </table>
-
-  <div class="totals">
-    <h4>Selected Month Total: Rs.<span>{{ total.toFixed(2) }}</span></h4>
-  </div>
 </template>
