@@ -70,11 +70,11 @@ function openPassword() {
   <div v-else id="appSection">
     <h2>Expense Tracker</h2>
     <UserControls @logout="logout" @open-password="openPassword" />
+    <MonthNav :label="monthLabel" @prev="prevMonth" @next="nextMonth" />
     <button class="add-btn" @click="openAdd">+ Add Expense</button>
     <div class="totals">
       <h4>Selected Month Total: Rs.<span>{{ total.toFixed(2) }}</span></h4>
     </div>
-    <MonthNav :label="monthLabel" @prev="prevMonth" @next="nextMonth" />
     <ExpenseList :expenses="expenses" @edit="openEdit" @delete="onDelete" />
 
     <ExpenseModal v-if="editingExpense" :expense="editingExpense" @close="editingExpense = null" @save="onSave" />
