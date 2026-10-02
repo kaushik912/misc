@@ -290,9 +290,16 @@ tbody tr td:last-child {
   padding: 0 4px;
 }
 
-th.sortable {
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  padding: 4px 10px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   cursor: pointer;
-  user-select: none;
 }
 
 .sort-icon {
