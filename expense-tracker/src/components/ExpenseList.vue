@@ -1,6 +1,21 @@
 <script setup>
-defineProps({ expenses: Array, isLoading: Boolean });
+import { ref, computed } from "vue";
+
+const props = defineProps({ expenses: Array, isLoading: Boolean });
 defineEmits(["edit", "delete"]);
+
+const amountSort = ref(null); // null = default (date desc), "asc", "desc"
+
+const sortedExpenses = computed(() => {
+  if (!amountSort.value) return props.expenses;
+  const dir = amountSort.value === "asc" ? 1 : -1;
+  return [...props.expenses].sort((a, b) => dir * (parseFloat(a.amount) - parseFloat(b.amount)));
+});
+
+// Cycles: default -> ascending -> descending -> default.
+function toggleAmountSort() {
+  amountSort.value = amountSort.value === null ? "asc" : amountSort.value === "asc" ? "desc" : null;
+}
 </script>
 
 <template>
@@ -10,13 +25,15 @@ defineEmits(["edit", "delete"]);
     <thead>
       <tr>
         <th>Date</th>
-        <th>Amount (Rs.)</th>
+        <th class="sortable" @click="toggleAmountSort">
+          Amount (Rs.) {{ amountSort === "asc" ? "▲" : amountSort === "desc" ? "▼" : "⇅" }}
+        </th>
         <th>Category</th>
         <th>Actions</th>
       </tr>
     </thead>
     <tbody>
-      <tr v-for="e in expenses" :key="e.id">
+      <tr v-for="e in sortedExpenses" :key="e.id">
         <td>{{ e.date }}</td>
         <td>{{ parseFloat(e.amount).toFixed(2) }}</td>
         <td>{{ e.category }}</td>

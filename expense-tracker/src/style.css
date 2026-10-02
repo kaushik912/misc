@@ -289,3 +289,8 @@ tbody tr td:last-child {
   cursor: pointer;
   padding: 0 4px;
 }
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
