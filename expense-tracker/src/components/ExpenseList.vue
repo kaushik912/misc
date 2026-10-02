@@ -20,18 +20,19 @@ function toggleAmountSort() {
 
 <template>
   <h3>Transactions</h3>
+  <button type="button" class="sort-btn" @click="toggleAmountSort">
+    Sort by amount
+    <svg class="sort-icon" viewBox="0 0 10 14" width="10" height="14" aria-hidden="true">
+      <path d="M5 0L10 6H0z" :opacity="amountSort === 'asc' ? 1 : 0.25" />
+      <path d="M5 14L0 8h10z" :opacity="amountSort === 'desc' ? 1 : 0.25" />
+    </svg>
+  </button>
   <p v-if="isLoading" class="loading-text">Loading…</p>
   <table v-else>
     <thead>
       <tr>
         <th>Date</th>
-        <th class="sortable" @click="toggleAmountSort">
-          Amount (Rs.)
-          <svg class="sort-icon" viewBox="0 0 10 14" width="10" height="14" aria-hidden="true">
-            <path d="M5 0L10 6H0z" :opacity="amountSort === 'asc' ? 1 : 0.25" />
-            <path d="M5 14L0 8h10z" :opacity="amountSort === 'desc' ? 1 : 0.25" />
-          </svg>
-        </th>
+        <th>Amount (Rs.)</th>
         <th>Category</th>
         <th>Actions</th>
       </tr>
