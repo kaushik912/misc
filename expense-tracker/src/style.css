@@ -289,3 +289,14 @@ tbody tr td:last-child {
   cursor: pointer;
   padding: 0 4px;
 }
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-icon {
+  fill: currentColor;
+  vertical-align: middle;
+  margin-left: 4px;
+}
