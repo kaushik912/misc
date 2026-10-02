@@ -259,3 +259,33 @@ tbody tr td:last-child {
   width: 80%;
   max-width: 500px;
 }
+
+.toast {
+  position: fixed;
+  z-index: 2;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 90%;
+  padding: 10px 14px;
+  border-radius: 6px;
+  color: white;
+  background: #444;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.toast.success { background: #2e7d32; }
+.toast.error { background: #c62828; }
+
+.toast .toast-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}

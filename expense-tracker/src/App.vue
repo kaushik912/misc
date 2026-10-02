@@ -9,6 +9,7 @@ import MonthNav from "./components/MonthNav.vue";
 import ExpenseList from "./components/ExpenseList.vue";
 import ExpenseModal from "./components/ExpenseModal.vue";
 import PasswordModal from "./components/PasswordModal.vue";
+import StatusToast from "./components/StatusToast.vue";
 
 const { user, authError, login, logout } = useAuth();
 const {
@@ -18,6 +19,29 @@ const {
 
 const editingExpense = ref(null); // null = closed, {} = add mode, {id,...} = edit mode
 const showPasswordModal = ref(false);
+
+const toast = ref(null); // null or { type: "pending" | "success" | "error", message }
+let toastTimer = null;
+let toastSeq = 0;
+
+function showToast(type, message, autoCloseMs = 0) {
+  clearTimeout(toastTimer);
+  toast.value = { type, message };
+  if (autoCloseMs) toastTimer = setTimeout(() => (toast.value = null), autoCloseMs);
+}
+
+// Runs a background write, reflecting pending/success/error in the toast.
+// Only the latest operation's result updates the toast.
+async function withToast(work, { pending, success, failure }) {
+  const seq = ++toastSeq;
+  showToast("pending", pending);
+  try {
+    await work();
+    if (seq === toastSeq) showToast("success", success, 3000);
+  } catch (err) {
+    showToast("error", `${failure}: ${err.message}`);
+  }
+}
 
 const loggedIn = computed(() => testMode || !!user.value);
 
@@ -48,23 +72,23 @@ function openEdit(id) {
   editingExpense.value = expenses.value.find((e) => e.id === id);
 }
 
-async function onSave(payload) {
+function onSave(payload) {
   editingExpense.value = null; // close right away; list updates optimistically
-  try {
-    await saveExpense(payload);
-  } catch (err) {
-    alert(`Failed to save expense: ${err.message}`);
-  }
+  return withToast(() => saveExpense(payload), {
+    pending: "Saving expense…",
+    success: "Expense saved",
+    failure: "Failed to save expense",
+  });
 }
 
-async function onDelete(id) {
+function onDelete(id) {
   if (requiresLive("Deleting expenses")) return;
   if (!confirm("Are you sure you want to delete this expense?")) return;
-  try {
-    await deleteExpense(id);
-  } catch (err) {
-    alert(`Failed to delete expense: ${err.message}`);
-  }
+  return withToast(() => deleteExpense(id), {
+    pending: "Deleting expense…",
+    success: "Expense deleted",
+    failure: "Failed to delete expense",
+  });
 }
 
 function openPassword() {
@@ -88,5 +112,6 @@ function openPassword() {
 
     <ExpenseModal v-if="editingExpense" :expense="editingExpense" @close="editingExpense = null" @save="onSave" />
     <PasswordModal v-if="showPasswordModal" @close="showPasswordModal = false" />
+    <StatusToast :toast="toast" @close="toast = null" />
   </div>
 </template>
