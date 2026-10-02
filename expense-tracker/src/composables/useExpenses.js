@@ -96,23 +96,49 @@ export function useExpenses(userRef) {
     loadExpenses();
   }
 
+  function inCurrentMonth(date) {
+    const { year, month } = currentMonth.value;
+    return date.startsWith(`${year}-${String(month).padStart(2, "0")}-`);
+  }
+
+  // Replaces the visible list and its cache entry; other months' caches are dropped.
+  function setLocal(list) {
+    const { year, month } = currentMonth.value;
+    list.sort((a, b) => b.date.localeCompare(a.date));
+    monthCache.clear();
+    monthCache.set(`${year}-${month}`, list);
+    expenses.value = list;
+  }
+
+  // Optimistic: updates the UI immediately, rolls back and rethrows if the write fails.
   async function saveExpense({ id, amount, date, category }) {
     const user = userRef.value;
     if (!user) return;
 
-    if (id) {
-      await db.collection("expenses").doc(id).update({ amount, date, category });
-    } else {
-      await db.collection("expenses").add({ uid: user.uid, amount, date, category });
+    const previous = expenses.value;
+    const ref = id ? db.collection("expenses").doc(id) : db.collection("expenses").doc();
+    const doc = { id: ref.id, uid: user.uid, amount, date, category };
+    const rest = previous.filter((e) => e.id !== ref.id);
+    setLocal(inCurrentMonth(date) ? [...rest, doc] : rest);
+
+    try {
+      if (id) await ref.update({ amount, date, category });
+      else await ref.set({ uid: user.uid, amount, date, category });
+    } catch (err) {
+      setLocal([...previous]);
+      throw err;
     }
-    monthCache.clear();
-    await loadExpenses();
   }
 
   async function deleteExpense(id) {
-    await db.collection("expenses").doc(id).delete();
-    monthCache.clear();
-    await loadExpenses();
+    const previous = expenses.value;
+    setLocal(previous.filter((e) => e.id !== id));
+    try {
+      await db.collection("expenses").doc(id).delete();
+    } catch (err) {
+      setLocal([...previous]);
+      throw err;
+    }
   }
 
   return {
