@@ -49,13 +49,22 @@ function openEdit(id) {
 }
 
 async function onSave(payload) {
-  await saveExpense(payload);
-  editingExpense.value = null;
+  editingExpense.value = null; // close right away; list updates optimistically
+  try {
+    await saveExpense(payload);
+  } catch (err) {
+    alert(`Failed to save expense: ${err.message}`);
+  }
 }
 
 async function onDelete(id) {
   if (requiresLive("Deleting expenses")) return;
-  if (confirm("Are you sure you want to delete this expense?")) await deleteExpense(id);
+  if (!confirm("Are you sure you want to delete this expense?")) return;
+  try {
+    await deleteExpense(id);
+  } catch (err) {
+    alert(`Failed to delete expense: ${err.message}`);
+  }
 }
 
 function openPassword() {
