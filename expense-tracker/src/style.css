@@ -294,3 +294,9 @@ th.sortable {
   cursor: pointer;
   user-select: none;
 }
+
+.sort-icon {
+  fill: currentColor;
+  vertical-align: middle;
+  margin-left: 4px;
+}

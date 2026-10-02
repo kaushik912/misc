@@ -26,7 +26,11 @@ function toggleAmountSort() {
       <tr>
         <th>Date</th>
         <th class="sortable" @click="toggleAmountSort">
-          Amount (Rs.) {{ amountSort === "asc" ? "▲" : amountSort === "desc" ? "▼" : "⇅" }}
+          Amount (Rs.)
+          <svg class="sort-icon" viewBox="0 0 10 14" width="10" height="14" aria-hidden="true">
+            <path d="M5 0L10 6H0z" :opacity="amountSort === 'asc' ? 1 : 0.25" />
+            <path d="M5 14L0 8h10z" :opacity="amountSort === 'desc' ? 1 : 0.25" />
+          </svg>
         </th>
         <th>Category</th>
         <th>Actions</th>
