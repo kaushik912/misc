@@ -4,10 +4,10 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Prefix and fuzzy matching find partial words and typos
-- [ ] Title matches rank above body matches
-- [ ] A #tag token in the query filters by Tag and combines with text
-- [ ] Index stays in sync as Notes are created and edited
-- [ ] Core tests cover ranking, fuzzy, and tag filter through search(query)
+- [x] Prefix and fuzzy matching find partial words and typos
+- [x] Title matches rank above body matches
+- [x] A #tag token in the query filters by Tag and combines with text
+- [x] Index stays in sync as Notes are created and edited
+- [x] Core tests cover ranking, fuzzy, and tag filter through search(query)
