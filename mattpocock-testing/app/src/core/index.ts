@@ -145,8 +145,9 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         const seconds =
           entry?.utcSeconds ?? (entry ? Math.floor(entry.dos.getTime() / 1000) : undefined);
         const mtime = seconds === undefined ? Date.now() : seconds * 1000;
-        const id = name.replace(/\.txt$/, "");
-        const existing = await db.notes.get(id);
+        const named = ID_FILENAME.exec(name)?.[1]?.toLowerCase();
+        const id = named ?? uuidv7();
+        const existing = named ? await db.notes.get(id) : undefined;
         if (!existing) {
           await db.notes.add({
             id,
@@ -167,6 +168,8 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     },
   };
 }
+
+const ID_FILENAME = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.txt$/i;
 
 /** Info-ZIP "UT" payload: flags (mtime present) + int32 LE unix seconds. */
 function extendedTimestamp(ms: number): Uint8Array {
