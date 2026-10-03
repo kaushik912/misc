@@ -16,4 +16,11 @@ describe("export reminder", () => {
     await notes.create("hello");
     expect(await notes.exportReminderDue()).toBe(true);
   });
+
+  it("clears after an export", async () => {
+    const notes = await openNotes({ dbName: freshDb(), now: clock().now });
+    await notes.create("hello");
+    await notes.exportBundle();
+    expect(await notes.exportReminderDue()).toBe(false);
+  });
 });

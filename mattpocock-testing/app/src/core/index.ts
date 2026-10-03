@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
+import { openSettings } from "./settings";
 
 export interface Note {
   id: string;
@@ -56,7 +57,10 @@ export interface OpenNotesOptions {
 }
 
 export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> {
-  const db = new Dexie(options.dbName ?? "notes") as Dexie & {
+  const dbName = options.dbName ?? "notes";
+  const now = options.now ?? Date.now;
+  const settings = await openSettings(dbName);
+  const db = new Dexie(dbName) as Dexie & {
     notes: EntityTable<Note, "id">;
   };
   db.version(1).stores({ notes: "id, updatedAt, trashedAt" });
@@ -116,6 +120,8 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     },
 
     async exportReminderDue() {
+      const lastExportAt = await settings.getLastExportAt();
+      if (lastExportAt !== null) return false;
       return (await db.notes.filter((n) => n.trashedAt === null).count()) > 0;
     },
 
@@ -131,7 +137,9 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
           },
         ];
       }
-      return zipSync(entries);
+      const zip = zipSync(entries);
+      await settings.setLastExportAt(now());
+      return zip;
     },
   };
 }
