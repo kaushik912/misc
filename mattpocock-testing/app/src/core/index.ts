@@ -37,6 +37,11 @@ export interface Notes {
    * 0x5455 value, falling back to 2s-granular DOS time when it is absent.
    */
   exportBundle(): Promise<Uint8Array>;
+  /**
+   * True when live Notes exist and the last export was 30+ days ago (or there
+   * has never been one). Clears once exportBundle succeeds.
+   */
+  exportReminderDue(): Promise<boolean>;
 }
 
 export interface TagCount {
@@ -46,6 +51,8 @@ export interface TagCount {
 
 export interface OpenNotesOptions {
   dbName?: string;
+  /** Clock, injectable for tests. Defaults to Date.now. */
+  now?: () => number;
 }
 
 export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> {
@@ -106,6 +113,10 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       return (await readAll()).filter(
         (note) => note.trashedAt === null && note.tags.includes(wanted),
       );
+    },
+
+    async exportReminderDue() {
+      return (await db.notes.filter((n) => n.trashedAt === null).count()) > 0;
     },
 
     async exportBundle() {
