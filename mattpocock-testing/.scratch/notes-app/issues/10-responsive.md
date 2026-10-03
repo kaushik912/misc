@@ -4,8 +4,8 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Phone-width layout is usable end to end
-- [ ] Two-pane layout unchanged on wide screens
-- [ ] Verified with a Playwright mobile viewport
+- [x] Phone-width layout is usable end to end
+- [x] Two-pane layout unchanged on wide screens
+- [x] Verified with a Playwright mobile viewport
