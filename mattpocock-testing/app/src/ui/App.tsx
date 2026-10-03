@@ -16,6 +16,9 @@ export function App() {
   const [reminderDue, setReminderDue] = useState(false);
   const [query, setQuery] = useState("");
   const queryRef = useRef("");
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashed, setTrashed] = useState<NoteView[]>([]);
+  const [confirmingEmpty, setConfirmingEmpty] = useState(false);
 
   const refresh = useCallback(
     async (store: Notes, tag: string | null) => {
@@ -24,6 +27,7 @@ export function App() {
       // A Tag with no remaining Notes is gone: drop the filter with it.
       const live = tag && all.some((t) => t.tag === tag) ? tag : null;
       if (live !== tag) setActiveTag(live);
+      setTrashed(await store.listTrash());
       setReminderDue(await store.exportReminderDue());
       const q = queryRef.current.trim();
       if (q) setList(await store.search(q));
@@ -79,6 +83,28 @@ export function App() {
     setDraft(created.text);
   }
 
+  async function trashSelected() {
+    if (!notes || !selectedId) return;
+    await flush();
+    await notes.trash(selectedId);
+    setSelectedId(null);
+    setDraft("");
+    await refresh(notes, activeTag);
+  }
+
+  async function restore(id: string) {
+    if (!notes) return;
+    await notes.restore(id);
+    await refresh(notes, activeTag);
+  }
+
+  async function emptyTrash() {
+    if (!notes) return;
+    await notes.emptyTrash();
+    setConfirmingEmpty(false);
+    await refresh(notes, activeTag);
+  }
+
   async function exportNotes() {
     if (!notes) return;
     await flush();
@@ -132,7 +158,45 @@ export function App() {
             </li>
           ))}
         </ul>
+        <button
+          onClick={() => {
+            setShowTrash((v) => !v);
+            setConfirmingEmpty(false);
+          }}
+          aria-pressed={showTrash}
+        >
+          Trash ({trashed.length})
+        </button>
       </nav>
+      {showTrash ? (
+      <section aria-label="Trash" style={{ flex: 1 }}>
+        <h2>Trash</h2>
+        {trashed.length > 0 &&
+          (confirmingEmpty ? (
+            <div role="alertdialog" aria-label="Confirm empty Trash">
+              Permanently delete {trashed.length} trashed note(s)? This cannot be undone.{" "}
+              <button onClick={() => void emptyTrash()}>Confirm empty Trash</button>{" "}
+              <button onClick={() => setConfirmingEmpty(false)}>Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmingEmpty(true)}>Empty Trash</button>
+          ))}
+        <ul aria-label="Trashed notes">
+          {trashed.map((note) => (
+            <li key={note.id}>
+              {note.title}{" "}
+              <button
+                aria-label={`Restore ${note.title}`}
+                onClick={() => void restore(note.id)}
+              >
+                Restore
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+      ) : (
+      <>
       <section style={{ width: 240 }}>
         <button onClick={newNote} disabled={!notes}>
           New note
@@ -168,16 +232,21 @@ export function App() {
       </section>
       <section style={{ flex: 1 }}>
         {selectedId ? (
-          <textarea
-            aria-label="Note text"
-            value={draft}
-            onChange={(e) => edit(e.target.value)}
-            style={{ width: "100%", minHeight: 300 }}
-          />
+          <>
+            <button onClick={() => void trashSelected()}>Delete</button>
+            <textarea
+              aria-label="Note text"
+              value={draft}
+              onChange={(e) => edit(e.target.value)}
+              style={{ width: "100%", minHeight: 300 }}
+            />
+          </>
         ) : (
           <p>Select a note or create a new one.</p>
         )}
       </section>
+      </>
+      )}
     </main>
     </>
   );
