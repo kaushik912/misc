@@ -1,0 +1,30 @@
+.layout { display: flex; gap: 16px; }
+.layout .tags { width: 140px; }
+.layout .list { width: 240px; }
+.layout .editor, .layout .trash { flex: 1; }
+.layout .list input[type="search"] { width: 100%; }
+.layout .editor textarea { width: 100%; min-height: 300px; }
+.narrow-only { display: none; }
+
+/* Phone width: one pane at a time. */
+@media (max-width: 640px) {
+  .narrow-only { display: inline-block; }
+  .topbar { display: flex; gap: 8px; padding: 4px 0; }
+  .layout { display: block; }
+  .layout .tags,
+  .layout .list,
+  .layout .editor,
+  .layout .trash { width: auto; box-sizing: border-box; }
+  .layout .editor textarea { min-height: 60vh; font-size: 16px; box-sizing: border-box; }
+  .layout .list input[type="search"] { font-size: 16px; box-sizing: border-box; }
+  .layout .list button, .layout .tags button, .layout .editor button { min-height: 40px; }
+
+  /* Drawer closed: hide the tag sidebar. Open: it replaces the other panes. */
+  .layout[data-tags-open="false"] .tags { display: none; }
+  .layout[data-tags-open="true"] .list,
+  .layout[data-tags-open="true"] .editor,
+  .layout[data-tags-open="true"] .trash { display: none; }
+
+  .layout[data-pane="list"] .editor { display: none; }
+  .layout[data-pane="editor"] .list { display: none; }
+}
