@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { strToU8, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
 
 export interface Note {
@@ -26,6 +27,16 @@ export interface Notes {
   listTags(): Promise<TagCount[]>;
   /** Live Notes using the Tag (case-insensitive), newest updatedAt first. */
   notesByTag(tag: string): Promise<NoteView[]>;
+  /**
+   * Export bundle: a zip with one `<id>.txt` (raw text) per live Note.
+   *
+   * Entry mtime carries `updatedAt` in two encodings: the extended timestamp
+   * field (0x5455, UTC unix seconds, 1s precision) and the standard DOS time
+   * (local wall-clock, 2s precision, rounded down). Sub-second precision is
+   * lost; importers should compare `Math.floor(updatedAt / 1000)` against the
+   * 0x5455 value, falling back to 2s-granular DOS time when it is absent.
+   */
+  exportBundle(): Promise<Uint8Array>;
 }
 
 export interface TagCount {
@@ -96,7 +107,30 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         (note) => note.trashedAt === null && note.tags.includes(wanted),
       );
     },
+
+    async exportBundle() {
+      const live = await db.notes.filter((note) => note.trashedAt === null).toArray();
+      const entries: Zippable = {};
+      for (const note of live) {
+        entries[`${note.id}.txt`] = [
+          strToU8(note.text),
+          {
+            mtime: note.updatedAt,
+            extra: { 0x5455: extendedTimestamp(note.updatedAt) },
+          },
+        ];
+      }
+      return zipSync(entries);
+    },
   };
+}
+
+/** Info-ZIP "UT" payload: flags (mtime present) + int32 LE unix seconds. */
+function extendedTimestamp(ms: number): Uint8Array {
+  const bytes = new Uint8Array(5);
+  bytes[0] = 1;
+  new DataView(bytes.buffer).setInt32(1, Math.floor(ms / 1000), true);
+  return bytes;
 }
 
 function deriveTitle(text: string): string {
