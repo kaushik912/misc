@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import MiniSearch from "minisearch";
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
 import { openSettings } from "./settings";
@@ -30,6 +31,8 @@ export interface Notes {
   listTags(): Promise<TagCount[]>;
   /** Live Notes using the Tag (case-insensitive), newest updatedAt first. */
   notesByTag(tag: string): Promise<NoteView[]>;
+  /** Live Notes matching the query, best match first. */
+  search(query: string): Promise<NoteView[]>;
   /**
    * Export bundle: a zip with one `<id>.txt` (raw text) per live Note.
    *
@@ -68,6 +71,16 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
   db.version(1).stores({ notes: "id, updatedAt, trashedAt" });
   await db.open();
 
+  const index = new MiniSearch<{ id: string; title: string; body: string }>({
+    fields: ["title", "body"],
+  });
+  const indexDoc = (note: Note) => ({
+    id: note.id,
+    title: deriveTitle(note.text),
+    body: note.text,
+  });
+  index.addAll((await db.notes.toArray()).map(indexDoc));
+
   async function readAll(): Promise<NoteView[]> {
     const all = await db.notes.orderBy("updatedAt").reverse().toArray();
     return all.map((note) => ({
@@ -88,6 +101,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         trashedAt: null,
       };
       await db.notes.add(note);
+      index.add(indexDoc(note));
       return note;
     },
 
@@ -96,6 +110,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       if (!existing) throw new Error(`Note not found: ${id}`);
       const updated: Note = { ...existing, text, updatedAt: Date.now() };
       await db.notes.put(updated);
+      index.replace(indexDoc(updated));
       return updated;
     },
 
@@ -127,6 +142,23 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       return (await db.notes.filter((n) => n.trashedAt === null).count()) > 0;
     },
 
+    async search(query) {
+      const wanted = deriveTags(query);
+      const text = query.replace(TAG_PATTERN, " ").trim();
+      const all = await readAll();
+      const byId = new Map(all.map((note) => [note.id, note]));
+      const candidates =
+        text === ""
+          ? all
+          : index
+              .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
+              .map((hit) => byId.get(hit.id)!);
+      return candidates.filter(
+        (note) =>
+          note.trashedAt === null && wanted.every((tag) => note.tags.includes(tag)),
+      );
+    },
+
     async exportBundle() {
       const live = await db.notes.filter((note) => note.trashedAt === null).toArray();
       const entries: Zippable = {};
@@ -146,6 +178,8 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
   };
 }
 
+const TAG_PATTERN = /(?<=^|\s)#([a-z][a-z0-9-]*)/gim;
+
 /** Info-ZIP "UT" payload: flags (mtime present) + int32 LE unix seconds. */
 function extendedTimestamp(ms: number): Uint8Array {
   const bytes = new Uint8Array(5);
@@ -161,7 +195,7 @@ function deriveTitle(text: string): string {
 
 function deriveTags(text: string): string[] {
   const tags = new Set<string>();
-  for (const match of text.matchAll(/(?<=^|\s)#([a-z][a-z0-9-]*)/gim)) {
+  for (const match of text.matchAll(TAG_PATTERN)) {
     tags.add(match[1]!.toLowerCase());
   }
   return [...tags];

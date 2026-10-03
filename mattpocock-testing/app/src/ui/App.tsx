@@ -14,6 +14,8 @@ export function App() {
   const [tags, setTags] = useState<TagCount[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [reminderDue, setReminderDue] = useState(false);
+  const [query, setQuery] = useState("");
+  const queryRef = useRef("");
 
   const refresh = useCallback(
     async (store: Notes, tag: string | null) => {
@@ -22,8 +24,10 @@ export function App() {
       // A Tag with no remaining Notes is gone: drop the filter with it.
       const live = tag && all.some((t) => t.tag === tag) ? tag : null;
       if (live !== tag) setActiveTag(live);
-      setList(live ? await store.notesByTag(live) : await store.list());
       setReminderDue(await store.exportReminderDue());
+      const q = queryRef.current.trim();
+      if (q) setList(await store.search(q));
+      else setList(live ? await store.notesByTag(live) : await store.list());
     },
     [],
   );
@@ -49,6 +53,12 @@ export function App() {
     await flush();
     setActiveTag(tag);
     await refresh(notes, tag);
+  }
+
+  async function onSearch(value: string) {
+    setQuery(value);
+    queryRef.current = value;
+    if (notes) await refresh(notes, activeTag);
   }
 
   // Flush unsaved edits when the tab is hidden or closed.
@@ -127,6 +137,14 @@ export function App() {
         <button onClick={newNote} disabled={!notes}>
           New note
         </button>
+        <input
+          type="search"
+          aria-label="Search notes"
+          placeholder="Search (try #tag)"
+          value={query}
+          onChange={(e) => void onSearch(e.target.value)}
+          style={{ width: "100%" }}
+        />
         <button onClick={() => void exportNotes()} disabled={!notes}>
           Export
         </button>
