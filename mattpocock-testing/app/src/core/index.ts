@@ -3,6 +3,8 @@ import { strToU8, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
 import { openSettings } from "./settings";
 
+const EXPORT_REMINDER_MS = 30 * 24 * 60 * 60 * 1000;
+
 export interface Note {
   id: string;
   text: string;
@@ -121,7 +123,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 
     async exportReminderDue() {
       const lastExportAt = await settings.getLastExportAt();
-      if (lastExportAt !== null) return false;
+      if (lastExportAt !== null && now() - lastExportAt < EXPORT_REMINDER_MS) return false;
       return (await db.notes.filter((n) => n.trashedAt === null).count()) > 0;
     },
 
