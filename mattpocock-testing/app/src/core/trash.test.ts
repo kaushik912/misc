@@ -33,3 +33,17 @@ describe("trash(id)", () => {
     expect(titles(await notes.search("budget"))).toEqual(["Plan"]);
   });
 });
+
+describe("restore(id)", () => {
+  it("returns the Note to list, Tag counts and search, and out of the Trash", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    const note = await notes.create("Plan\n#work budget");
+    await notes.trash(note.id);
+    await notes.restore(note.id);
+
+    expect(titles(await notes.list())).toEqual(["Plan"]);
+    expect(await notes.listTags()).toEqual([{ tag: "work", count: 1 }]);
+    expect(titles(await notes.search("budget"))).toEqual(["Plan"]);
+    expect(await notes.listTrash()).toEqual([]);
+  });
+});
