@@ -4,8 +4,8 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Last-export timestamp stored locally and updated on export
-- [ ] Reminder appears after 30 days and clears after an export
-- [ ] Tests cover the 30-day rule
+- [x] Last-export timestamp stored locally and updated on export
+- [x] Reminder appears after 30 days and clears after an export
+- [x] Tests cover the 30-day rule

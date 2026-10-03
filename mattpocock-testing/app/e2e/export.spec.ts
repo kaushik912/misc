@@ -9,7 +9,7 @@ test("Export downloads a zip containing the Note", async ({ page }) => {
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Export" }).click(),
+    page.getByRole("button", { name: "Export", exact: true }).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/^notes-\d{4}-\d{2}-\d{2}\.zip$/);
 
