@@ -82,4 +82,14 @@ describe("search(query)", () => {
     await notes.create("Ideas\nwrite a novel");
     expect(titles(await notes.search("groc"))).toEqual(["Groceries"]);
   });
+
+  it("requires every word to match (AND), keeping prefix and typo tolerance", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("Budget\nreview the numbers");
+    await notes.create("Budget only\nnothing else");
+    await notes.create("Review only\nnothing else");
+    expect(titles(await notes.search("budget review"))).toEqual(["Budget"]);
+    expect(titles(await notes.search("budg rev"))).toEqual(["Budget"]);
+    expect(titles(await notes.search("budgit reviw"))).toEqual(["Budget"]);
+  });
 });

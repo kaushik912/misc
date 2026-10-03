@@ -229,7 +229,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         text === ""
           ? liveNotes()
           : index
-              .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
+              .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 }, combineWith: "AND" })
               .map((hit) => views.get(hit.id)!);
       return candidates.filter(
         (note) =>
