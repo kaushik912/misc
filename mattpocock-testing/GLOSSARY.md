@@ -1,11 +1,11 @@
 # Notes
 
-A local-first personal notes app: Markdown notes organised by tags and found by full-text search.
+A local-first personal notes app: plain-text notes organised by tags and found by full-text search.
 
 ## Language
 
 **Note**:
-A single Markdown document. The unit of creation, search, tagging and deletion.
+A single plain-text document, with no formatting syntax. The unit of creation, search, tagging and deletion.
 _Avoid_: Memo, document, entry, page
 
 **Title**:
@@ -21,5 +21,5 @@ The holding area for deleted Notes. A trashed Note can be restored until the Tra
 _Avoid_: Recycle bin, archive, soft delete
 
 **Export bundle**:
-A zip of one `.md` file per Note, used to move Notes between devices.
+A zip of one `.txt` file per Note, used to move Notes between devices.
 _Avoid_: Backup, dump, sync
