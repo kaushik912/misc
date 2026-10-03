@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openNotes, type Notes, type NoteView, type TagCount } from "../core";
+import { openNotes, type ImportSummary, type Notes, type NoteView, type TagCount } from "../core";
 
 const AUTOSAVE_DELAY_MS = 400;
 
@@ -10,6 +10,9 @@ export function App() {
   const [draft, setDraft] = useState("");
   const pending = useRef<{ id: string; text: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const [tags, setTags] = useState<TagCount[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -94,6 +97,19 @@ export function App() {
     setReminderDue(await notes.exportReminderDue());
   }
 
+  async function importNotes(file: File) {
+    if (!notes) return;
+    await flush();
+    setImportSummary(null);
+    setImportError(null);
+    try {
+      setImportSummary(await notes.importBundle(new Uint8Array(await file.arrayBuffer())));
+    } catch {
+      setImportError("Could not read that file as an Export bundle.");
+    }
+    await refresh(notes, activeTag);
+  }
+
   async function select(note: NoteView) {
     await flush();
     setSelectedId(note.id);
@@ -148,6 +164,24 @@ export function App() {
         <button onClick={() => void exportNotes()} disabled={!notes}>
           Export
         </button>
+        <label>
+          Import
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            disabled={!notes}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void importNotes(file);
+            }}
+          />
+        </label>
+        <div role="status" aria-label="Import summary">
+          {importSummary &&
+            `Imported: ${importSummary.added} added, ${importSummary.updated} updated, ${importSummary.skipped} skipped`}
+          {importError}
+        </div>
         <ul aria-label="Notes">
           {list.map((note) => (
             <li key={note.id}>

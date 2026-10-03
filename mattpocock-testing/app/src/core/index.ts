@@ -1,8 +1,9 @@
 import Dexie, { type EntityTable } from "dexie";
 import MiniSearch from "minisearch";
-import { strToU8, zipSync, type Zippable } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
 import { openSettings } from "./settings";
+import { readEntryTimes } from "./zipTimes";
 
 const EXPORT_REMINDER_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -44,10 +45,23 @@ export interface Notes {
    */
   exportBundle(): Promise<Uint8Array>;
   /**
+   * Import an Export bundle. For `<id>.txt` entries: an unknown id is added
+   * with that id; a known id is overwritten when the entry time is strictly
+   * newer than the stored updatedAt, otherwise skipped. Any other entry name
+   * becomes a new Note with a fresh id.
+   */
+  importBundle(zip: Uint8Array): Promise<ImportSummary>;
+  /**
    * True when live Notes exist and the last export was 30+ days ago (or there
    * has never been one). Clears once exportBundle succeeds.
    */
   exportReminderDue(): Promise<boolean>;
+}
+
+export interface ImportSummary {
+  added: number;
+  updated: number;
+  skipped: number;
 }
 
 export interface TagCount {
@@ -175,10 +189,42 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       await settings.setLastExportAt(now());
       return zip;
     },
+
+    async importBundle(zip) {
+      const summary: ImportSummary = { added: 0, updated: 0, skipped: 0 };
+      const times = readEntryTimes(zip);
+      for (const [name, bytes] of Object.entries(unzipSync(zip))) {
+        const entry = times.get(name);
+        const seconds =
+          entry?.utcSeconds ?? (entry ? Math.floor(entry.dos.getTime() / 1000) : undefined);
+        const mtime = seconds === undefined ? Date.now() : seconds * 1000;
+        const named = ID_FILENAME.exec(name)?.[1]?.toLowerCase();
+        const id = named ?? uuidv7();
+        const existing = named ? await db.notes.get(id) : undefined;
+        if (!existing) {
+          await db.notes.add({
+            id,
+            text: strFromU8(bytes),
+            createdAt: mtime,
+            updatedAt: mtime,
+            trashedAt: null,
+          });
+          summary.added++;
+        } else if (Math.floor(existing.updatedAt / 1000) < mtime / 1000) {
+          await db.notes.put({ ...existing, text: strFromU8(bytes), updatedAt: mtime });
+          summary.updated++;
+        } else {
+          summary.skipped++;
+        }
+      }
+      return summary;
+    },
   };
 }
 
 const TAG_PATTERN = /(?<=^|\s)#([a-z][a-z0-9-]*)/gim;
+
+const ID_FILENAME = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.txt$/i;
 
 /** Info-ZIP "UT" payload: flags (mtime present) + int32 LE unix seconds. */
 function extendedTimestamp(ms: number): Uint8Array {
