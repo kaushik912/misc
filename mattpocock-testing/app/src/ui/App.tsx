@@ -77,6 +77,20 @@ export function App() {
     setDraft(created.text);
   }
 
+  async function exportNotes() {
+    if (!notes) return;
+    await flush();
+    const zip = await notes.exportBundle();
+    const url = URL.createObjectURL(new Blob([zip as BlobPart], { type: "application/zip" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `notes-${new Date().toISOString().slice(0, 10)}.zip`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
   async function select(note: NoteView) {
     await flush();
     setSelectedId(note.id);
@@ -121,6 +135,9 @@ export function App() {
           onChange={(e) => void onSearch(e.target.value)}
           style={{ width: "100%" }}
         />
+        <button onClick={() => void exportNotes()} disabled={!notes}>
+          Export
+        </button>
         <ul aria-label="Notes">
           {list.map((note) => (
             <li key={note.id}>

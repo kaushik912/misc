@@ -4,9 +4,9 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Zip has one <id>.txt per live Note with raw text
-- [ ] Entry mtime equals the Note's updatedAt
-- [ ] Trashed Notes excluded
-- [ ] Core tests cover exportBundle()
+- [x] Zip has one <id>.txt per live Note with raw text
+- [x] Entry mtime equals the Note's updatedAt
+- [x] Trashed Notes excluded
+- [x] Core tests cover exportBundle()
