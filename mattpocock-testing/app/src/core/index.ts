@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
+import { readEntryTimes } from "./zipTimes";
 
 export interface Note {
   id: string;
@@ -138,16 +139,29 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 
     async importBundle(zip) {
       const summary: ImportSummary = { added: 0, updated: 0, skipped: 0 };
+      const times = readEntryTimes(zip);
       for (const [name, bytes] of Object.entries(unzipSync(zip))) {
-        const now = Date.now();
-        await db.notes.add({
-          id: name.replace(/\.txt$/, ""),
-          text: strFromU8(bytes),
-          createdAt: now,
-          updatedAt: now,
-          trashedAt: null,
-        });
-        summary.added++;
+        const entry = times.get(name);
+        const seconds =
+          entry?.utcSeconds ?? (entry ? Math.floor(entry.dos.getTime() / 1000) : undefined);
+        const mtime = seconds === undefined ? Date.now() : seconds * 1000;
+        const id = name.replace(/\.txt$/, "");
+        const existing = await db.notes.get(id);
+        if (!existing) {
+          await db.notes.add({
+            id,
+            text: strFromU8(bytes),
+            createdAt: mtime,
+            updatedAt: mtime,
+            trashedAt: null,
+          });
+          summary.added++;
+        } else if (Math.floor(existing.updatedAt / 1000) < mtime / 1000) {
+          await db.notes.put({ ...existing, text: strFromU8(bytes), updatedAt: mtime });
+          summary.updated++;
+        } else {
+          summary.skipped++;
+        }
       }
       return summary;
     },
