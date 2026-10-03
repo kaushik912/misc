@@ -1,3 +1,4 @@
+import Dexie from "dexie";
 import { describe, expect, it } from "vitest";
 import { openNotes } from "./index";
 
@@ -43,7 +44,33 @@ describe("search(query)", () => {
     expect(titles(await notes.search("#work #urgent"))).toEqual(["A"]);
   });
 
-  it("tolerates typos",async () => {
+  it("stays in sync as Notes are created and edited", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    const note = await notes.create("Draft\nabout pelicans");
+    expect(titles(await notes.search("pelican"))).toEqual(["Draft"]);
+    await notes.update(note.id, "Draft\nabout walruses");
+    expect(await notes.search("pelican")).toEqual([]);
+    expect(titles(await notes.search("walrus"))).toEqual(["Draft"]);
+    await notes.create("Fresh\nanother walrus");
+    expect(await notes.search("walrus")).toHaveLength(2);
+  });
+
+  it("excludes trashed Notes", async () => {
+    const dbName = freshDb();
+    const seed = await openNotes({ dbName });
+    const gone = await seed.create("Gone\nsecret #work");
+    await seed.create("Kept\nsecret #work");
+    // Trash has no core API yet: mark the stored row directly, then reopen.
+    const raw = new Dexie(dbName);
+    raw.version(1).stores({ notes: "id, updatedAt, trashedAt" });
+    await raw.table("notes").update(gone.id, { trashedAt: Date.now() });
+    raw.close();
+    const notes = await openNotes({ dbName });
+    expect(titles(await notes.search("secret"))).toEqual(["Kept"]);
+    expect(titles(await notes.search("#work"))).toEqual(["Kept"]);
+  });
+
+  it("tolerates typos", async () => {
     const notes = await openNotes({ dbName: freshDb() });
     await notes.create("Groceries\nbuy oat milk");
     await notes.create("Ideas\nwrite a novel");
