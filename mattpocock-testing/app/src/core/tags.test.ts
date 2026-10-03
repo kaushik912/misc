@@ -40,3 +40,46 @@ describe("deriving Tags", () => {
     expect(await tagsOf("#work, #home. #a_b")).toEqual(["work", "home", "a"]);
   });
 });
+
+describe("listing Tags", () => {
+  it("lists each Tag with the number of Notes using it, most used first then alphabetical", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("#work #home");
+    await notes.create("#Work again #work");
+    await notes.create("#ideas");
+
+    expect(await notes.listTags()).toEqual([
+      { tag: "work", count: 2 },
+      { tag: "home", count: 1 },
+      { tag: "ideas", count: 1 },
+    ]);
+  });
+
+  it("drops a Tag once no Note uses it", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    const a = await notes.create("#solo and #shared");
+    const b = await notes.create("#shared");
+
+    await notes.update(a.id, "no tags now");
+    expect(await notes.listTags()).toEqual([{ tag: "shared", count: 1 }]);
+
+    await notes.update(b.id, "");
+    expect(await notes.listTags()).toEqual([]);
+  });
+});
+
+describe("filtering Notes by Tag", () => {
+  it("returns only Notes using the Tag, newest first, matching case-insensitively", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("first #work");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await notes.create("other #home");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await notes.create("third #Work");
+
+    const titles = (await notes.notesByTag("WORK")).map((note) => note.title);
+
+    expect(titles).toEqual(["third #Work", "first #work"]);
+    expect(await notes.notesByTag("missing")).toEqual([]);
+  });
+});

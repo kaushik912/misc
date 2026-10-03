@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openNotes, type Notes, type NoteView } from "../core";
+import { openNotes, type Notes, type NoteView, type TagCount } from "../core";
 
 const AUTOSAVE_DELAY_MS = 400;
 
@@ -11,12 +11,27 @@ export function App() {
   const pending = useRef<{ id: string; text: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const [tags, setTags] = useState<TagCount[]>([]);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  const refresh = useCallback(
+    async (store: Notes, tag: string | null) => {
+      const all = await store.listTags();
+      setTags(all);
+      // A Tag with no remaining Notes is gone: drop the filter with it.
+      const live = tag && all.some((t) => t.tag === tag) ? tag : null;
+      if (live !== tag) setActiveTag(live);
+      setList(live ? await store.notesByTag(live) : await store.list());
+    },
+    [],
+  );
+
   useEffect(() => {
     openNotes().then(async (opened) => {
       setNotes(opened);
-      setList(await opened.list());
+      await refresh(opened, null);
     });
-  }, []);
+  }, [refresh]);
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
@@ -24,8 +39,15 @@ export function App() {
     if (!job || !notes) return;
     pending.current = null;
     await notes.update(job.id, job.text);
-    setList(await notes.list());
-  }, [notes]);
+    await refresh(notes, activeTag);
+  }, [notes, activeTag, refresh]);
+
+  async function filterBy(tag: string | null) {
+    if (!notes) return;
+    await flush();
+    setActiveTag(tag);
+    await refresh(notes, tag);
+  }
 
   // Flush unsaved edits when the tab is hidden or closed.
   useEffect(() => {
@@ -40,7 +62,7 @@ export function App() {
     if (!notes) return;
     await flush();
     const created = await notes.create("");
-    setList(await notes.list());
+    await refresh(notes, activeTag);
     setSelectedId(created.id);
     setDraft(created.text);
   }
@@ -61,6 +83,22 @@ export function App() {
 
   return (
     <main style={{ display: "flex", gap: 16 }}>
+      <nav aria-label="Tags" style={{ width: 140 }}>
+        <ul>
+          <li>
+            <button onClick={() => void filterBy(null)} aria-pressed={activeTag === null}>
+              All notes
+            </button>
+          </li>
+          {tags.map(({ tag, count }) => (
+            <li key={tag}>
+              <button onClick={() => void filterBy(tag)} aria-pressed={activeTag === tag}>
+                #{tag} ({count})
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
       <section style={{ width: 240 }}>
         <button onClick={newNote} disabled={!notes}>
           New note
@@ -74,6 +112,11 @@ export function App() {
               >
                 {note.title}
               </button>
+              {note.tags.map((tag) => (
+                <span key={tag} data-testid="tag-chip" style={{ marginLeft: 4, fontSize: 12 }}>
+                  #{tag}
+                </span>
+              ))}
             </li>
           ))}
         </ul>

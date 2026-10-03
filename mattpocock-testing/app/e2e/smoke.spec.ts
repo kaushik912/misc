@@ -9,6 +9,31 @@ test("create a Note and see it in the list after reload", async ({ page }) => {
   await expect(page.getByRole("list", { name: "Notes" }).getByRole("listitem")).toHaveText(["Untitled"]);
 });
 
+test("Tags show as chips, in the sidebar with counts, and filter the list", async ({ page }) => {
+  await page.goto("/");
+  const text = page.getByRole("textbox", { name: "Note text" });
+  const items = page.getByRole("list", { name: "Notes" }).getByRole("listitem");
+  const sidebar = page.getByRole("navigation", { name: "Tags" });
+
+  await page.getByRole("button", { name: "New note" }).click();
+  await text.fill("Standup #work");
+  await expect(sidebar.getByRole("button", { name: "#work (1)" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New note" }).click();
+  await expect(text).toHaveValue("");
+  await text.fill("Dinner #home");
+  await expect(sidebar.getByRole("button", { name: "#home (1)" })).toBeVisible();
+  await expect(items).toHaveCount(2);
+
+  await sidebar.getByRole("button", { name: "#work (1)" }).click();
+  await expect(items).toHaveText(["Standup #work#work"]);
+
+  await items.first().getByRole("button").click();
+  await text.fill("Standup");
+  await expect(sidebar.getByRole("button", { name: /#work/ })).toHaveCount(0);
+  await expect(items).toHaveCount(2);
+});
+
 test("edit a Note, auto-save, and see the new Title after reload", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "New note" }).click();
