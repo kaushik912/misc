@@ -4,10 +4,10 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Trash a Note (sets trashedAt); it disappears from list, Tag counts and search
-- [ ] Restore returns it everywhere
-- [ ] Empty Trash is permanent and requires confirmation
-- [ ] Playwright flow: trash and restore
-- [ ] Core tests cover the Trash lifecycle
+- [x] Trash a Note (sets trashedAt); it disappears from list, Tag counts and search
+- [x] Restore returns it everywhere
+- [x] Empty Trash is permanent and requires confirmation
+- [x] Playwright flow: trash and restore
+- [x] Core tests cover the Trash lifecycle
