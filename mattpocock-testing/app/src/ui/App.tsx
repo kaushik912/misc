@@ -16,6 +16,7 @@ export function App() {
 
   const [tags, setTags] = useState<TagCount[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [reminderDue, setReminderDue] = useState(false);
 
   const refresh = useCallback(
     async (store: Notes, tag: string | null) => {
@@ -25,6 +26,7 @@ export function App() {
       const live = tag && all.some((t) => t.tag === tag) ? tag : null;
       if (live !== tag) setActiveTag(live);
       setList(live ? await store.notesByTag(live) : await store.list());
+      setReminderDue(await store.exportReminderDue());
     },
     [],
   );
@@ -82,6 +84,7 @@ export function App() {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setReminderDue(await notes.exportReminderDue());
   }
 
   async function importNotes(file: File) {
@@ -112,6 +115,13 @@ export function App() {
   }
 
   return (
+    <>
+    {reminderDue && (
+      <div role="status" aria-label="Export reminder">
+        It has been a while since your last export. Back up your notes.{" "}
+        <button onClick={() => void exportNotes()}>Export now</button>
+      </div>
+    )}
     <main style={{ display: "flex", gap: 16 }}>
       <nav aria-label="Tags" style={{ width: 140 }}>
         <ul>
@@ -185,5 +195,6 @@ export function App() {
         )}
       </section>
     </main>
+    </>
   );
 }

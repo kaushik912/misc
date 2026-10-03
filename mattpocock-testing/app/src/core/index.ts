@@ -1,7 +1,10 @@
 import Dexie, { type EntityTable } from "dexie";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
+import { openSettings } from "./settings";
 import { readEntryTimes } from "./zipTimes";
+
+const EXPORT_REMINDER_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface Note {
   id: string;
@@ -45,6 +48,11 @@ export interface Notes {
    * becomes a new Note with a fresh id.
    */
   importBundle(zip: Uint8Array): Promise<ImportSummary>;
+  /**
+   * True when live Notes exist and the last export was 30+ days ago (or there
+   * has never been one). Clears once exportBundle succeeds.
+   */
+  exportReminderDue(): Promise<boolean>;
 }
 
 export interface ImportSummary {
@@ -60,10 +68,15 @@ export interface TagCount {
 
 export interface OpenNotesOptions {
   dbName?: string;
+  /** Clock, injectable for tests. Defaults to Date.now. */
+  now?: () => number;
 }
 
 export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> {
-  const db = new Dexie(options.dbName ?? "notes") as Dexie & {
+  const dbName = options.dbName ?? "notes";
+  const now = options.now ?? Date.now;
+  const settings = await openSettings(dbName);
+  const db = new Dexie(dbName) as Dexie & {
     notes: EntityTable<Note, "id">;
   };
   db.version(1).stores({ notes: "id, updatedAt, trashedAt" });
@@ -122,6 +135,12 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       );
     },
 
+    async exportReminderDue() {
+      const lastExportAt = await settings.getLastExportAt();
+      if (lastExportAt !== null && now() - lastExportAt < EXPORT_REMINDER_MS) return false;
+      return (await db.notes.filter((n) => n.trashedAt === null).count()) > 0;
+    },
+
     async exportBundle() {
       const live = await db.notes.filter((note) => note.trashedAt === null).toArray();
       const entries: Zippable = {};
@@ -134,7 +153,9 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
           },
         ];
       }
-      return zipSync(entries);
+      const zip = zipSync(entries);
+      await settings.setLastExportAt(now());
+      return zip;
     },
 
     async importBundle(zip) {
