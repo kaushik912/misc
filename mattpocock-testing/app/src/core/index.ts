@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import { strToU8, zipSync, type Zippable } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
 
 export interface Note {
@@ -37,6 +37,19 @@ export interface Notes {
    * 0x5455 value, falling back to 2s-granular DOS time when it is absent.
    */
   exportBundle(): Promise<Uint8Array>;
+  /**
+   * Import an Export bundle. For `<id>.txt` entries: an unknown id is added
+   * with that id; a known id is overwritten when the entry time is strictly
+   * newer than the stored updatedAt, otherwise skipped. Any other entry name
+   * becomes a new Note with a fresh id.
+   */
+  importBundle(zip: Uint8Array): Promise<ImportSummary>;
+}
+
+export interface ImportSummary {
+  added: number;
+  updated: number;
+  skipped: number;
 }
 
 export interface TagCount {
@@ -121,6 +134,22 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         ];
       }
       return zipSync(entries);
+    },
+
+    async importBundle(zip) {
+      const summary: ImportSummary = { added: 0, updated: 0, skipped: 0 };
+      for (const [name, bytes] of Object.entries(unzipSync(zip))) {
+        const now = Date.now();
+        await db.notes.add({
+          id: name.replace(/\.txt$/, ""),
+          text: strFromU8(bytes),
+          createdAt: now,
+          updatedAt: now,
+          trashedAt: null,
+        });
+        summary.added++;
+      }
+      return summary;
     },
   };
 }
