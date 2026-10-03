@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import "./app.css";
 import { openNotes, type ImportSummary, type Notes, type NoteView, type TagCount } from "../core";
 
 const AUTOSAVE_DELAY_MS = 400;
@@ -22,6 +23,9 @@ export function App() {
   const [showTrash, setShowTrash] = useState(false);
   const [trashed, setTrashed] = useState<NoteView[]>([]);
   const [confirmingEmpty, setConfirmingEmpty] = useState(false);
+  // Narrow screens only (CSS ignores these on wide): which pane is showing.
+  const [pane, setPane] = useState<"list" | "editor">("list");
+  const [tagsOpen, setTagsOpen] = useState(false);
 
   const refresh = useCallback(
     async (store: Notes, tag: string | null) => {
@@ -58,6 +62,7 @@ export function App() {
   async function filterBy(tag: string | null) {
     if (!notes) return;
     await flush();
+    setTagsOpen(false);
     setActiveTag(tag);
     await refresh(notes, tag);
   }
@@ -84,6 +89,7 @@ export function App() {
     await refresh(notes, activeTag);
     setSelectedId(created.id);
     setDraft(created.text);
+    setPane("editor");
   }
 
   async function trashSelected() {
@@ -92,6 +98,7 @@ export function App() {
     await notes.trash(selectedId);
     setSelectedId(null);
     setDraft("");
+    setPane("list");
     await refresh(notes, activeTag);
   }
 
@@ -140,6 +147,7 @@ export function App() {
     await flush();
     setSelectedId(note.id);
     setDraft(note.text);
+    setPane("editor");
   }
 
   function edit(text: string) {
@@ -158,8 +166,13 @@ export function App() {
         <button onClick={() => void exportNotes()}>Export now</button>
       </div>
     )}
-    <main style={{ display: "flex", gap: 16 }}>
-      <nav aria-label="Tags" style={{ width: 140 }}>
+    <div className="topbar narrow-only">
+      <button aria-expanded={tagsOpen} onClick={() => setTagsOpen((v) => !v)}>
+        Tags menu
+      </button>
+    </div>
+    <main className="layout" data-pane={pane} data-tags-open={tagsOpen}>
+      <nav aria-label="Tags" className="tags">
         <ul>
           <li>
             <button onClick={() => void filterBy(null)} aria-pressed={activeTag === null}>
@@ -177,6 +190,7 @@ export function App() {
         <button
           onClick={() => {
             setShowTrash((v) => !v);
+            setTagsOpen(false);
             setConfirmingEmpty(false);
           }}
           aria-pressed={showTrash}
@@ -185,7 +199,7 @@ export function App() {
         </button>
       </nav>
       {showTrash ? (
-      <section aria-label="Trash" style={{ flex: 1 }}>
+      <section aria-label="Trash" className="trash">
         <h2>Trash</h2>
         {trashed.length > 0 &&
           (confirmingEmpty ? (
@@ -213,7 +227,7 @@ export function App() {
       </section>
       ) : (
       <>
-      <section style={{ width: 240 }}>
+      <section className="list">
         <button onClick={newNote} disabled={!notes}>
           New note
         </button>
@@ -223,7 +237,6 @@ export function App() {
           placeholder="Search (try #tag)"
           value={query}
           onChange={(e) => void onSearch(e.target.value)}
-          style={{ width: "100%" }}
         />
         <button onClick={() => void exportNotes()} disabled={!notes}>
           Export
@@ -264,15 +277,17 @@ export function App() {
           ))}
         </ul>
       </section>
-      <section style={{ flex: 1 }}>
+      <section className="editor">
         {selectedId ? (
           <>
+            <button className="narrow-only" onClick={() => void flush().then(() => setPane("list"))}>
+              Back to notes
+            </button>
             <button onClick={() => void trashSelected()}>Delete</button>
             <textarea
               aria-label="Note text"
               value={draft}
               onChange={(e) => edit(e.target.value)}
-              style={{ width: "100%", minHeight: 300 }}
             />
           </>
         ) : (
