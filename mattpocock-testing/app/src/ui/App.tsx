@@ -1,8 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import "./app.css";
 import { openNotes, type ImportSummary, type Notes, type NoteView, type TagCount } from "../core";
 
 const AUTOSAVE_DELAY_MS = 400;
+
+/** Memoised so a refresh re-renders only Notes that changed, not all 10k rows. */
+const NoteRow = memo(function NoteRow({
+  note,
+  selected,
+  onSelect,
+}: {
+  note: NoteView;
+  selected: boolean;
+  onSelect: (note: NoteView) => void;
+}) {
+  return (
+    <li>
+      <button onClick={() => onSelect(note)} aria-current={selected}>
+        {note.title}
+      </button>
+      {note.tags.map((tag) => (
+        <span key={tag} data-testid="tag-chip" style={{ marginLeft: 4, fontSize: 12 }}>
+          #{tag}
+        </span>
+      ))}
+    </li>
+  );
+});
 
 export function App() {
   const [notes, setNotes] = useState<Notes | null>(null);
@@ -27,6 +51,12 @@ export function App() {
   const [pane, setPane] = useState<"list" | "editor">("list");
   const [tagsOpen, setTagsOpen] = useState(false);
 
+  const refreshList = useCallback(async (store: Notes, tag: string | null) => {
+    const q = queryRef.current.trim();
+    if (q) setList(await store.search(q));
+    else setList(tag ? await store.notesByTag(tag) : await store.list());
+  }, []);
+
   const refresh = useCallback(
     async (store: Notes, tag: string | null) => {
       const all = await store.listTags();
@@ -36,11 +66,9 @@ export function App() {
       if (live !== tag) setActiveTag(live);
       setTrashed(await store.listTrash());
       setReminderDue(await store.exportReminderDue());
-      const q = queryRef.current.trim();
-      if (q) setList(await store.search(q));
-      else setList(live ? await store.notesByTag(live) : await store.list());
+      await refreshList(store, live);
     },
-    [],
+    [refreshList],
   );
 
   useEffect(() => {
@@ -70,7 +98,8 @@ export function App() {
   async function onSearch(value: string) {
     setQuery(value);
     queryRef.current = value;
-    if (notes) await refresh(notes, activeTag);
+    // Typing only changes the list; Tags, Trash and the reminder are unaffected.
+    if (notes) await refreshList(notes, activeTag);
   }
 
   // Flush unsaved edits when the tab is hidden or closed.
@@ -149,6 +178,10 @@ export function App() {
     setDraft(note.text);
     setPane("editor");
   }
+  // Stable identity so memoised rows are not re-rendered by every App render.
+  const selectRef = useRef(select);
+  selectRef.current = select;
+  const onSelect = useCallback((note: NoteView) => void selectRef.current(note), []);
 
   function edit(text: string) {
     if (!selectedId) return;
@@ -261,19 +294,12 @@ export function App() {
         </div>
         <ul aria-label="Notes">
           {list.map((note) => (
-            <li key={note.id}>
-              <button
-                onClick={() => void select(note)}
-                aria-current={note.id === selectedId}
-              >
-                {note.title}
-              </button>
-              {note.tags.map((tag) => (
-                <span key={tag} data-testid="tag-chip" style={{ marginLeft: 4, fontSize: 12 }}>
-                  #{tag}
-                </span>
-              ))}
-            </li>
+            <NoteRow
+              key={note.id}
+              note={note}
+              selected={note.id === selectedId}
+              onSelect={onSelect}
+            />
           ))}
         </ul>
       </section>

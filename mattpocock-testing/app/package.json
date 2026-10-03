@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
+    "perf:core": "vitest run --config vitest.perf.config.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
