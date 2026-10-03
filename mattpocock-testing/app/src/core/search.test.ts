@@ -21,7 +21,29 @@ describe("search(query)", () => {
     expect((await notes.search("garden"))[0]?.title).toBe("Garden");
   });
 
-  it("tolerates typos", async () => {
+  it("filters by a #tag token, case-insensitively", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("Plan\n#Work quarterly review");
+    await notes.create("Chores\n#home laundry");
+    expect(titles(await notes.search("#work"))).toEqual(["Plan"]);
+  });
+
+  it("combines a #tag token with text", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("Plan\n#work budget review");
+    await notes.create("Standup\n#work daily sync");
+    await notes.create("Taxes\n#home budget review");
+    expect(titles(await notes.search("budget #work"))).toEqual(["Plan"]);
+  });
+
+  it("requires every #tag token to match", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("A\n#work #urgent");
+    await notes.create("B\n#work");
+    expect(titles(await notes.search("#work #urgent"))).toEqual(["A"]);
+  });
+
+  it("tolerates typos",async () => {
     const notes = await openNotes({ dbName: freshDb() });
     await notes.create("Groceries\nbuy oat milk");
     await notes.create("Ideas\nwrite a novel");

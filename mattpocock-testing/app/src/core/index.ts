@@ -113,14 +113,25 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     },
 
     async search(query) {
-      const byId = new Map((await readAll()).map((note) => [note.id, note]));
-      return index
-        .search(query, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
-        .map((hit) => byId.get(hit.id)!)
-        .filter((note) => note.trashedAt === null);
+      const wanted = deriveTags(query);
+      const text = query.replace(TAG_PATTERN, " ").trim();
+      const all = await readAll();
+      const byId = new Map(all.map((note) => [note.id, note]));
+      const candidates =
+        text === ""
+          ? all
+          : index
+              .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
+              .map((hit) => byId.get(hit.id)!);
+      return candidates.filter(
+        (note) =>
+          note.trashedAt === null && wanted.every((tag) => note.tags.includes(tag)),
+      );
     },
   };
 }
+
+const TAG_PATTERN = /(?<=^|\s)#([a-z][a-z0-9-]*)/gim;
 
 function deriveTitle(text: string): string {
   const firstLine = text.split(/\r?\n/).find((line) => line.trim() !== "");
@@ -129,7 +140,7 @@ function deriveTitle(text: string): string {
 
 function deriveTags(text: string): string[] {
   const tags = new Set<string>();
-  for (const match of text.matchAll(/(?<=^|\s)#([a-z][a-z0-9-]*)/gim)) {
+  for (const match of text.matchAll(TAG_PATTERN)) {
     tags.add(match[1]!.toLowerCase());
   }
   return [...tags];
