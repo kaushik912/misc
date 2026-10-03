@@ -12,6 +12,8 @@ export interface Note {
 /** A Note as read back: Title is derived from `text`, never stored. */
 export interface NoteView extends Note {
   title: string;
+  /** Lowercase Tags derived from `text`, in order of first appearance. */
+  tags: string[];
 }
 
 export interface Notes {
@@ -57,7 +59,11 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 
     async list() {
       const all = await db.notes.orderBy("updatedAt").reverse().toArray();
-      return all.map((note) => ({ ...note, title: deriveTitle(note.text) }));
+      return all.map((note) => ({
+        ...note,
+        title: deriveTitle(note.text),
+        tags: deriveTags(note.text),
+      }));
     },
   };
 }
@@ -65,4 +71,12 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 function deriveTitle(text: string): string {
   const firstLine = text.split(/\r?\n/).find((line) => line.trim() !== "");
   return firstLine?.trim() ?? "Untitled";
+}
+
+function deriveTags(text: string): string[] {
+  const tags = new Set<string>();
+  for (const match of text.matchAll(/(?<=^|\s)#([a-z][a-z0-9-]*)/gim)) {
+    tags.add(match[1]!.toLowerCase());
+  }
+  return [...tags];
 }
