@@ -18,18 +18,26 @@ test("app loads and works offline after the first load", async ({ page, context 
 });
 
 test("serves an installable manifest and requests persistent storage", async ({ page, request }) => {
-  const calls: string[] = [];
-  await page.exposeFunction("recordPersist", () => calls.push("persist"));
+  // Count calls inside the page (init script runs before app code) instead of
+  // exposeFunction, whose binding can race the first navigation.
   await page.addInitScript(() => {
-    const storage = navigator.storage;
-    storage.persist = async () => {
-      (window as unknown as { recordPersist: () => void }).recordPersist();
+    const w = window as unknown as { persistCalls: number };
+    w.persistCalls = 0;
+    navigator.storage.persist = async () => {
+      w.persistCalls++;
       return true;
     };
-    storage.persisted = async () => false;
+    navigator.storage.persisted = async () => false;
   });
   await page.goto("./");
-  await expect.poll(() => calls.length).toBe(1);
+  await expect(page.getByRole("button", { name: "New note" })).toBeEnabled({ timeout: 30_000 });
+  // Event-driven wait with a cold-start-sized timeout, not the 5s default poll.
+  await page.waitForFunction(
+    () => (window as unknown as { persistCalls: number }).persistCalls >= 1,
+    undefined,
+    { timeout: 30_000 },
+  );
+  expect(await page.evaluate(() => (window as unknown as { persistCalls: number }).persistCalls)).toBe(1);
 
   const manifest = await (await request.get("manifest.webmanifest")).json();
   expect(manifest.display).toBe("standalone");

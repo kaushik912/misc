@@ -6,7 +6,7 @@ test.describe("phone width", () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
   test("one pane at a time: list, editor, back, tags drawer", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("./");
     const text = page.getByRole("textbox", { name: "Note text" });
     const sidebar = page.getByRole("navigation", { name: "Tags" });
 
@@ -53,7 +53,7 @@ test.describe("phone width", () => {
   });
 
   test("no horizontal overflow", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("./");
     await page.getByRole("button", { name: "New note" }).click();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -66,7 +66,7 @@ test.describe("wide layout", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
   test("two panes and tag sidebar stay visible together", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("./");
     await expect(page.getByRole("navigation", { name: "Tags" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New note" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Tags menu" })).toBeHidden();
