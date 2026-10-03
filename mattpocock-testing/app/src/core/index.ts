@@ -85,7 +85,7 @@ export interface OpenNotesOptions {
 
 export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> {
   const dbName = options.dbName ?? "notes";
-  const now = options.now ?? Date.now;
+  const now = options.now ?? (() => Date.now());
   const settings = await openSettings(dbName);
   const db = new Dexie(dbName) as Dexie & {
     notes: EntityTable<Note, "id">;
@@ -135,12 +135,12 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 
   return {
     async create(text) {
-      const now = Date.now();
+      const at = now();
       const note: Note = {
         id: uuidv7(),
         text,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: at,
+        updatedAt: at,
         trashedAt: null,
       };
       await db.notes.add(note);
@@ -152,7 +152,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     async update(id, text) {
       const existing = views.get(id);
       if (!existing) throw new Error(`Note not found: ${id}`);
-      const updated: Note = { ...storedNote(existing)!, text, updatedAt: Date.now() };
+      const updated: Note = { ...storedNote(existing)!, text, updatedAt: now() };
       await db.notes.put(updated);
       index.replace(indexDoc(updated));
       remember(updated);
@@ -262,7 +262,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         const entry = times.get(name);
         const seconds =
           entry?.utcSeconds ?? (entry ? Math.floor(entry.dos.getTime() / 1000) : undefined);
-        const mtime = seconds === undefined ? Date.now() : seconds * 1000;
+        const mtime = seconds === undefined ? now() : seconds * 1000;
         const named = ID_FILENAME.exec(name)?.[1]?.toLowerCase();
         const id = named ?? uuidv7();
         const existing = named ? (writes.get(id) ?? storedNote(views.get(id))) : undefined;

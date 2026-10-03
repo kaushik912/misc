@@ -111,3 +111,18 @@ describe("ordering", () => {
     expect((await notes.list()).map((n) => n.title)).toEqual(["a edited", "b"]);
   });
 });
+
+describe("the injected clock", () => {
+  it("stamps createdAt and updatedAt on create and update", async () => {
+    let t = 1_000;
+    const notes = await openNotes({ dbName: freshDb(), now: () => t });
+    const created = await notes.create("a");
+    expect([created.createdAt, created.updatedAt]).toEqual([1_000, 1_000]);
+
+    t = 2_000;
+    const updated = await notes.update(created.id, "a2");
+
+    expect(updated.createdAt).toBe(1_000);
+    expect(updated.updatedAt).toBe(2_000);
+  });
+});
