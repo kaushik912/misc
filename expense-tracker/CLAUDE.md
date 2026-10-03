@@ -85,3 +85,5 @@ If Firestore rules changed: `firebase deploy` (without `--only`) to push both ho
 Vite auto-hashes all JS/CSS filenames, so every deploy is a cache-buster (no manual versioning needed).
 
 See HELP.md for detailed Firebase one-time setup, CLI requirements, and origin notes.
+
+- After any major change (new feature, architectural decision, new dependency, workflow/config/command change, or lesson learned), update this CLAUDE.md in the same commit so it reflects the current state — keep entries concise and edit or remove outdated ones rather than appending.
