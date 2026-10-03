@@ -115,7 +115,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     async search(query) {
       const byId = new Map((await readAll()).map((note) => [note.id, note]));
       return index
-        .search(query, { prefix: true, fuzzy: 0.2 })
+        .search(query, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
         .map((hit) => byId.get(hit.id)!)
         .filter((note) => note.trashedAt === null);
     },
