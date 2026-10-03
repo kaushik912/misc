@@ -1,4 +1,3 @@
-import Dexie from "dexie";
 import { describe, expect, it } from "vitest";
 import { openNotes } from "./index";
 
@@ -15,11 +14,17 @@ describe("search(query)", () => {
     expect(titles(await notes.search("milk"))).toEqual(["Groceries"]);
   });
 
-  it("ranks Title matches above body matches", async () => {
+  it("ranks a Title match above a body match of similar length", async () => {
     const notes = await openNotes({ dbName: freshDb() });
-    await notes.create("Weekend\ngarden garden garden garden garden garden garden garden garden garden garden garden");
-    await notes.create("Garden\nplant tomatoes and a very long list of other chores for the day and then some more words to pad this note out even further so it is clearly the longest one around");
-    expect((await notes.search("garden"))[0]?.title).toBe("Garden");
+    // Some unrelated Notes so word rarity is realistic.
+    await notes.create("Groceries\nbuy oat milk and bread today");
+    await notes.create("Ideas\nwrite a novel about the sea");
+    await notes.create("Taxes\nfile the forms before april");
+    // The word appears only in the body here (three times, so a plain
+    // unboosted score would favour it) and only in the Title there.
+    await notes.create("Weekend\nwater the garden, rake the garden, trim the garden hedge");
+    await notes.create("Garden plans for spring\nwater the lawn, rake the leaves, trim the hedge");
+    expect((await notes.search("garden"))[0]?.title).toBe("Garden plans for spring");
   });
 
   it("filters by a #tag token, case-insensitively", async () => {
@@ -56,16 +61,10 @@ describe("search(query)", () => {
   });
 
   it("excludes trashed Notes", async () => {
-    const dbName = freshDb();
-    const seed = await openNotes({ dbName });
-    const gone = await seed.create("Gone\nsecret #work");
-    await seed.create("Kept\nsecret #work");
-    // Trash has no core API yet: mark the stored row directly, then reopen.
-    const raw = new Dexie(dbName);
-    raw.version(1).stores({ notes: "id, updatedAt, trashedAt" });
-    await raw.table("notes").update(gone.id, { trashedAt: Date.now() });
-    raw.close();
-    const notes = await openNotes({ dbName });
+    const notes = await openNotes({ dbName: freshDb() });
+    const gone = await notes.create("Gone\nsecret #work");
+    await notes.create("Kept\nsecret #work");
+    await notes.trash(gone.id);
     expect(titles(await notes.search("secret"))).toEqual(["Kept"]);
     expect(titles(await notes.search("#work"))).toEqual(["Kept"]);
   });

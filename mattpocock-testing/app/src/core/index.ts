@@ -99,7 +99,8 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
   const indexDoc = (note: Note) => ({
     id: note.id,
     title: deriveTitle(note.text),
-    body: note.text,
+    // Title and body are separate fields so the Title boost is meaningful.
+    body: deriveBody(note.text),
   });
 
   // Every Note as a NoteView, loaded once on open (the same read that builds
@@ -317,6 +318,13 @@ function storedNote(view: NoteView | undefined): Note | undefined {
 function deriveTitle(text: string): string {
   const firstLine = text.split(/\r?\n/).find((line) => line.trim() !== "");
   return firstLine?.trim() ?? "Untitled";
+}
+
+/** Everything after the Title line. */
+function deriveBody(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const first = lines.findIndex((line) => line.trim() !== "");
+  return first === -1 ? "" : lines.slice(first + 1).join("\n");
 }
 
 function deriveTags(text: string): string[] {
