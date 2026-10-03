@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "dexie": "^4.4.6",
+    "minisearch": "^7.2.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "uuid": "^14.0.2"
