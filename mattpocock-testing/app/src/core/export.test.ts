@@ -46,16 +46,10 @@ describe("exportBundle()", () => {
   });
 
   it("excludes trashed Notes", async () => {
-    const dbName = freshDb();
-    const notes = await openNotes({ dbName });
+    const notes = await openNotes({ dbName: freshDb() });
     const live = await notes.create("keep");
     const gone = await notes.create("trash me");
-    // Trash (ticket 05) does not exist yet: mark trashedAt directly in the store.
-    const { default: Dexie } = await import("dexie");
-    const raw = new Dexie(dbName);
-    raw.version(1).stores({ notes: "id, updatedAt, trashedAt" });
-    await raw.table("notes").update(gone.id, { trashedAt: Date.now() });
-    raw.close();
+    await notes.trash(gone.id);
 
     const files = unzipSync(await notes.exportBundle());
     expect(Object.keys(files)).toEqual([`${live.id}.txt`]);

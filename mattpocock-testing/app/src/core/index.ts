@@ -101,16 +101,36 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     title: deriveTitle(note.text),
     body: note.text,
   });
-  index.addAll((await db.notes.toArray()).map(indexDoc));
 
-  async function readAll(): Promise<NoteView[]> {
-    const all = await db.notes.orderBy("updatedAt").reverse().toArray();
-    return all.map((note) => ({
-      ...note,
-      title: deriveTitle(note.text),
-      tags: deriveTags(note.text),
-    }));
-  }
+  // Every Note as a NoteView, loaded once on open (the same read that builds
+  // the search index) and kept in step by every write below, so reads never
+  // touch IndexedDB or re-derive Titles/Tags. Assumes one open store per
+  // database: writes from another tab are seen after reopening.
+  const views = new Map<string, NoteView>();
+  const toView = (note: Note): NoteView => ({
+    ...note,
+    title: deriveTitle(note.text),
+    tags: deriveTags(note.text),
+  });
+  const stored = await db.notes.toArray();
+  for (const note of stored) views.set(note.id, toView(note));
+  index.addAll(stored.map(indexDoc));
+
+  // Derived read models, rebuilt lazily after any write.
+  let live: NoteView[] | null = null;
+  let tagCounts: TagCount[] | null = null;
+  const changed = () => {
+    live = null;
+    tagCounts = null;
+  };
+  const remember = (note: Note) => {
+    views.set(note.id, toView(note));
+    changed();
+  };
+  const liveNotes = () =>
+    (live ??= [...views.values()]
+      .filter((note) => note.trashedAt === null)
+      .sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? 1 : -1)));
 
   return {
     async create(text) {
@@ -124,81 +144,92 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       };
       await db.notes.add(note);
       index.add(indexDoc(note));
+      remember(note);
       return note;
     },
 
     async update(id, text) {
-      const existing = await db.notes.get(id);
+      const existing = views.get(id);
       if (!existing) throw new Error(`Note not found: ${id}`);
-      const updated: Note = { ...existing, text, updatedAt: Date.now() };
+      const updated: Note = { ...storedNote(existing)!, text, updatedAt: Date.now() };
       await db.notes.put(updated);
       index.replace(indexDoc(updated));
+      remember(updated);
       return updated;
     },
 
     async list() {
-      return (await readAll()).filter((note) => note.trashedAt === null);
+      return [...liveNotes()];
     },
 
     async trash(id) {
-      const updated = await db.notes.update(id, { trashedAt: now() });
-      if (!updated) throw new Error(`Note not found: ${id}`);
+      const existing = views.get(id);
+      if (!existing) throw new Error(`Note not found: ${id}`);
+      const trashedAt = now();
+      await db.notes.update(id, { trashedAt });
+      views.set(id, { ...existing, trashedAt });
+      changed();
     },
 
     async restore(id) {
-      const updated = await db.notes.update(id, { trashedAt: null });
-      if (!updated) throw new Error(`Note not found: ${id}`);
+      const existing = views.get(id);
+      if (!existing) throw new Error(`Note not found: ${id}`);
+      await db.notes.update(id, { trashedAt: null });
+      views.set(id, { ...existing, trashedAt: null });
+      changed();
     },
 
     async emptyTrash() {
-      const ids = await db.notes
+      const ids = [...views.values()]
         .filter((note) => note.trashedAt !== null)
-        .primaryKeys();
+        .map((note) => note.id);
       await db.notes.bulkDelete(ids);
-      for (const id of ids) index.discard(id);
+      for (const id of ids) {
+        index.discard(id);
+        views.delete(id);
+      }
+      changed();
     },
 
     async listTrash() {
-      return (await readAll())
+      return [...views.values()]
         .filter((note) => note.trashedAt !== null)
-        .sort((a, b) => b.trashedAt! - a.trashedAt!);
+        .sort((a, b) => b.trashedAt! - a.trashedAt! || (a.id < b.id ? 1 : -1));
     },
 
     async listTags() {
-      const counts = new Map<string, number>();
-      for (const note of await readAll()) {
-        if (note.trashedAt !== null) continue;
-        for (const tag of note.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      if (!tagCounts) {
+        const counts = new Map<string, number>();
+        for (const note of liveNotes()) {
+          for (const tag of note.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+        }
+        tagCounts = [...counts]
+          .map(([tag, count]) => ({ tag, count }))
+          .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
       }
-      return [...counts]
-        .map(([tag, count]) => ({ tag, count }))
-        .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+      return tagCounts.map((entry) => ({ ...entry }));
     },
 
     async notesByTag(tag) {
       const wanted = tag.toLowerCase();
-      return (await readAll()).filter(
-        (note) => note.trashedAt === null && note.tags.includes(wanted),
-      );
+      return liveNotes().filter((note) => note.tags.includes(wanted));
     },
 
     async exportReminderDue() {
       const lastExportAt = await settings.getLastExportAt();
       if (lastExportAt !== null && now() - lastExportAt < EXPORT_REMINDER_MS) return false;
-      return (await db.notes.filter((n) => n.trashedAt === null).count()) > 0;
+      return liveNotes().length > 0;
     },
 
     async search(query) {
       const wanted = deriveTags(query);
       const text = query.replace(TAG_PATTERN, " ").trim();
-      const all = await readAll();
-      const byId = new Map(all.map((note) => [note.id, note]));
       const candidates =
         text === ""
-          ? all
+          ? liveNotes()
           : index
               .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
-              .map((hit) => byId.get(hit.id)!);
+              .map((hit) => views.get(hit.id)!);
       return candidates.filter(
         (note) =>
           note.trashedAt === null && wanted.every((tag) => note.tags.includes(tag)),
@@ -206,9 +237,8 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     },
 
     async exportBundle() {
-      const live = await db.notes.filter((note) => note.trashedAt === null).toArray();
       const entries: Zippable = {};
-      for (const note of live) {
+      for (const note of liveNotes()) {
         entries[`${note.id}.txt`] = [
           strToU8(note.text),
           {
@@ -225,6 +255,8 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     async importBundle(zip) {
       const summary: ImportSummary = { added: 0, updated: 0, skipped: 0 };
       const times = readEntryTimes(zip);
+      // Decide against the in-memory Notes, then write everything in one batch.
+      const writes = new Map<string, Note>();
       for (const [name, bytes] of Object.entries(unzipSync(zip))) {
         const entry = times.get(name);
         const seconds =
@@ -232,26 +264,32 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         const mtime = seconds === undefined ? Date.now() : seconds * 1000;
         const named = ID_FILENAME.exec(name)?.[1]?.toLowerCase();
         const id = named ?? uuidv7();
-        const existing = named ? await db.notes.get(id) : undefined;
+        const existing = named ? (writes.get(id) ?? storedNote(views.get(id))) : undefined;
         if (!existing) {
-          const note: Note = {
+          writes.set(id, {
             id,
             text: strFromU8(bytes),
             createdAt: mtime,
             updatedAt: mtime,
             trashedAt: null,
-          };
-          await db.notes.add(note);
-          index.add(indexDoc(note));
+          });
           summary.added++;
         } else if (Math.floor(existing.updatedAt / 1000) < mtime / 1000) {
-          const updated: Note = { ...existing, text: strFromU8(bytes), updatedAt: mtime };
-          await db.notes.put(updated);
-          index.replace(indexDoc(updated));
+          writes.set(id, { ...existing, text: strFromU8(bytes), updatedAt: mtime });
           summary.updated++;
         } else {
           summary.skipped++;
         }
+      }
+      if (writes.size > 0) {
+        const notes = [...writes.values()];
+        await db.notes.bulkPut(notes);
+        for (const note of notes) {
+          if (views.has(note.id)) index.replace(indexDoc(note));
+          else index.add(indexDoc(note));
+          views.set(note.id, toView(note));
+        }
+        changed();
       }
       return summary;
     },
@@ -268,6 +306,12 @@ function extendedTimestamp(ms: number): Uint8Array {
   bytes[0] = 1;
   new DataView(bytes.buffer).setInt32(1, Math.floor(ms / 1000), true);
   return bytes;
+}
+
+function storedNote(view: NoteView | undefined): Note | undefined {
+  if (!view) return undefined;
+  const { title: _title, tags: _tags, ...note } = view;
+  return note;
 }
 
 function deriveTitle(text: string): string {

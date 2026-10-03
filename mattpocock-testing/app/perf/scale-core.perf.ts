@@ -30,6 +30,11 @@ describe(`scale at ${N} Notes`, () => {
     await ms("notesByTag('tag7')", () => notes.notesByTag("tag7"));
     const [first] = await notes.list();
     await ms("update()", () => notes.update(first!.id, first!.text + " edit"), 10);
+    await ms("update() + list() + listTags() (autosave then refresh)", async () => {
+      await notes.update(first!.id, first!.text + " edit");
+      await notes.list();
+      await notes.listTags();
+    }, 10);
     await ms("create()", () => notes.create("new note #tag7"), 10);
     await ms("listTrash()", () => notes.listTrash());
     await ms("exportReminderDue()", () => notes.exportReminderDue());
