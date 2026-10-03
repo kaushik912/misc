@@ -16,6 +16,9 @@ export interface NoteView extends Note {
 
 export interface Notes {
   create(text: string): Promise<Note>;
+  /** Replace a Note's text and bump updatedAt. */
+  update(id: string, text: string): Promise<Note>;
+  /** Newest updatedAt first. */
   list(): Promise<NoteView[]>;
 }
 
@@ -44,8 +47,16 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       return note;
     },
 
+    async update(id, text) {
+      const existing = await db.notes.get(id);
+      if (!existing) throw new Error(`Note not found: ${id}`);
+      const updated: Note = { ...existing, text, updatedAt: Date.now() };
+      await db.notes.put(updated);
+      return updated;
+    },
+
     async list() {
-      const all = await db.notes.toArray();
+      const all = await db.notes.orderBy("updatedAt").reverse().toArray();
       return all.map((note) => ({ ...note, title: deriveTitle(note.text) }));
     },
   };
