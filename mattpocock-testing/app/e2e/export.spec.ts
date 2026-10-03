@@ -3,7 +3,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { expect, test } from "@playwright/test";
 
 test("Export downloads a zip containing the Note", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
   await page.getByRole("button", { name: "New note" }).click();
   await page.getByRole("textbox", { name: "Note text" }).fill("Exported note");
 

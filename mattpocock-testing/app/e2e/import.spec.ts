@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 test("Export then import: same Note is skipped, a plain .txt becomes a new Note", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("./");
   await page.getByRole("button", { name: "New note" }).click();
   await page.getByRole("textbox", { name: "Note text" }).fill("Round trip note");
 

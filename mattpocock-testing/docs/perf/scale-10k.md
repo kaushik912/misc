@@ -41,15 +41,22 @@ Typing time is included (6 keystrokes at 50 ms = 300 ms; 12 keystrokes at 30 ms 
 
 ## Hot spots found and fixed
 
-1. **Every read re-read and re-derived all Notes.** `list`, `listTags`, `notesByTag`, `search`, `listTrash`, `exportReminderDue` and `exportBundle` each ran `toArray()` over IndexedDB then recomputed Title and Tags for every Note (about 120 ms each at 10k). The UI's `refresh()` called four of them per autosave and per search keystroke (about 490 ms). Fix: `openNotes` loads each Note once into an in-memory `NoteView` map (the same read that already builds the search index) and every write keeps it in step; the sorted live list and Tag counts are derived lazily and invalidated on write. Trade-off: one open store per database is assumed (writes from another tab appear after reopening), which the search index already assumed.
+1. **Every read re-read and re-derived all Notes.** `list`, `listTags`, `notesByTag`, `search`, `listTrash`, `exportReminderDue` and `exportBundle` each ran `toArray()` over IndexedDB then recomputed Title and Tags for every Note (about 120 ms each at 10k). The UI's `refresh()` called four of them per autosave and per search keystroke (about 490 ms). Fix: `openNotes` loads each Note once into an in-memory `NoteView` map (the same read that already builds the search index) and every write keeps it in step; the sorted live list and Tag counts are derived lazily and invalidated on write. Trade-off: reads are served from this cache, so changes made by another tab or PWA window appear after reopening. Writes do not trust the cache (see "Review-fix re-measurement").
 2. **`importBundle` did sequential `get` + `add` per entry** (about 1 ms each, 10 s for 10k). Fix: decide against the in-memory Notes, then one `bulkPut`.
 3. **Search keystrokes refreshed Tags, Trash and the reminder too.** Fix: typing refreshes only the list.
 4. **Every refresh re-rendered every row** (and each select re-rendered all 10k). Fix: memoised `NoteRow`.
 
 Core fixes are covered through the public interface by existing behavioural tests (trash, restore, empty Trash, import, search, Tags, export) plus `src/core/scale.test.ts`. The UI fixes are covered by the existing e2e suite and `e2e/scale.spec.ts`. One existing test (`export.test.ts`, "excludes trashed Notes") wrote `trashedAt` behind the store's back via raw Dexie; it now uses `trash()`.
 
+## Review-fix re-measurement
+
+Two review fixes touched hot paths, so everything was re-measured on the same machine.
+
+- **Writes read authoritative rows.** `update`, `trash`, `restore`, `emptyTrash`, `importBundle` and `exportBundle` now read the stored row(s) inside an IndexedDB transaction instead of trusting the cache (other tabs can change data). `npm run perf:core` after the change: seed via `importBundle` 783 ms (was 758 ms), open 400 ms, `update()` 9.8 ms (was 10 ms), `update()` + `list()` + `listTags()` 10.9 ms, `create()` 0.3 ms, `search("garden")` 7.2 ms, `search("budg")` 7.8 ms; reads are still ~0 ms. No material regression. `exportBundle()` now reads every row once (a full `toArray`, roughly the ~120 ms open-time read at 10k) because it also refreshes the cache; it is an infrequent, user-initiated action and is not in the table above.
+- **List capped at 200 rows with "Show more notes".** The list rendered every row (10k `li` after reload), which dominated the UI timings. Now only a page of 200 rows is rendered; search or a Tag narrows the rest, and the button reveals 200 more at a time. Chromium, 10,000 Notes (`e2e/scale.spec.ts`, single runs): reload until the list is populated 783 ms (was 1,473 ms), type "quokka" until results settle 413 ms (was 1,323 ms), edit until the new Title shows 1,263 ms (was 1,171 ms; ~760 ms of that is typing and the autosave debounce, so this is within run-to-run noise).
+
 ## Remaining costs and not done
 
-- Open still takes ~430 ms at 10k (reading every Note plus building the MiniSearch index), paid once per page load. Persisting the index or building it lazily would reduce it but adds complexity; not needed for responsiveness.
-- The list renders every row in the DOM (10k `li` after reload, 1.5 s to first populated list). Windowing would remove this but is a UI/CSS change that overlaps ticket 10, so it was left alone. Typing a one-letter search can return thousands of rows, which is where the remaining ~1.3 s search time goes.
+- Open still takes ~400 ms at 10k (reading every Note plus building the MiniSearch index), paid once per page load. Persisting the index or building it lazily would reduce it but adds complexity; not needed for responsiveness.
+- The list is capped rather than virtualised: scrolling through all 10k Notes means pressing "Show more notes" repeatedly. Search and Tags are the intended way to find a Note at this size.
 - `update()` costs ~10 ms, dominated by the MiniSearch `replace` and the IndexedDB `put`.

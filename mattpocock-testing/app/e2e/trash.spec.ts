@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("trash a Note and restore it", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
   await page.getByRole("button", { name: "New note" }).click();
   await page.getByRole("textbox", { name: "Note text" }).fill("Doomed note");
   const noteButton = page
@@ -22,7 +22,7 @@ test("trash a Note and restore it", async ({ page }) => {
 });
 
 test("Empty Trash asks for confirmation", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
   await page.getByRole("button", { name: "New note" }).click();
   await page.getByRole("textbox", { name: "Note text" }).fill("Temporary");
   await page.getByRole("button", { name: "Delete", exact: true }).click();

@@ -3,9 +3,9 @@ import MiniSearch from "minisearch";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { v7 as uuidv7 } from "uuid";
 import { openSettings } from "./settings";
-import { readEntryTimes } from "./zipTimes";
+import { readEntryTimes } from "./zipEntryTimes";
 
-const EXPORT_REMINDER_MS = 30 * 24 * 60 * 60 * 1000;
+const EXPORT_REMINDER_AFTER_30_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface Note {
   id: string;
@@ -55,8 +55,10 @@ export interface Notes {
   /**
    * Import an Export bundle. For `<id>.txt` entries: an unknown id is added
    * with that id; a known id is overwritten when the entry time is strictly
-   * newer than the stored updatedAt, otherwise skipped. Any other entry name
-   * becomes a new Note with a fresh id.
+   * newer than the stored updatedAt, otherwise skipped. Any other `.txt` entry
+   * becomes a new Note with a fresh id. Directory entries and non-`.txt` files
+   * are ignored and counted as skipped. Overwriting a trashed Note replaces its
+   * text and updatedAt only: it stays in the Trash (trashedAt is preserved).
    */
   importBundle(zip: Uint8Array): Promise<ImportSummary>;
   /**
@@ -85,7 +87,7 @@ export interface OpenNotesOptions {
 
 export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> {
   const dbName = options.dbName ?? "notes";
-  const now = options.now ?? Date.now;
+  const now = options.now ?? (() => Date.now());
   const settings = await openSettings(dbName);
   const db = new Dexie(dbName) as Dexie & {
     notes: EntityTable<Note, "id">;
@@ -99,13 +101,16 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
   const indexDoc = (note: Note) => ({
     id: note.id,
     title: deriveTitle(note.text),
-    body: note.text,
+    // Title and body are separate fields so the Title boost is meaningful.
+    body: deriveBody(note.text),
   });
 
-  // Every Note as a NoteView, loaded once on open (the same read that builds
-  // the search index) and kept in step by every write below, so reads never
-  // touch IndexedDB or re-derive Titles/Tags. Assumes one open store per
-  // database: writes from another tab are seen after reopening.
+  // Read cache: every Note as a NoteView, loaded once on open (the same read
+  // that builds the search index) so reads never touch IndexedDB or re-derive
+  // Titles/Tags. Reads (list, search, tags, trash, reminder) are served from
+  // here and may be stale: changes made by another tab or PWA window show on
+  // reopen. Writes never trust it: each reads the authoritative row(s) from
+  // IndexedDB inside its own transaction, then refreshes the cache from them.
   const views = new Map<string, NoteView>();
   const toView = (note: Note): NoteView => ({
     ...note,
@@ -123,37 +128,52 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     live = null;
     tagCounts = null;
   };
+  /** Bring the cache and search index in step with a row just read or written. */
   const remember = (note: Note) => {
+    if (views.has(note.id)) index.replace(indexDoc(note));
+    else index.add(indexDoc(note));
     views.set(note.id, toView(note));
+    changed();
+  };
+  const forget = (id: string) => {
+    if (!views.has(id)) return;
+    index.discard(id);
+    views.delete(id);
     changed();
   };
   const liveNotes = () =>
     (live ??= [...views.values()]
-      .filter((note) => note.trashedAt === null)
+      .filter(isLive)
       .sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? 1 : -1)));
+  const trashedNotes = () => [...views.values()].filter(isTrashed);
+
+  /** Read-modify-write one row atomically against what is stored. */
+  const patch = (id: string, fields: Pick<Note, "trashedAt">) =>
+    db.transaction("rw", db.notes, async () => {
+      const row = await db.notes.get(id);
+      if (!row) throw new Error(`Note not found: ${id}`);
+      const next = { ...row, ...fields };
+      await db.notes.put(next);
+      return next;
+    });
 
   return {
     async create(text) {
-      const now = Date.now();
-      const note: Note = {
-        id: uuidv7(),
-        text,
-        createdAt: now,
-        updatedAt: now,
-        trashedAt: null,
-      };
+      const at = now();
+      const note = newNote(uuidv7(), text, at);
       await db.notes.add(note);
-      index.add(indexDoc(note));
       remember(note);
       return note;
     },
 
     async update(id, text) {
-      const existing = views.get(id);
-      if (!existing) throw new Error(`Note not found: ${id}`);
-      const updated: Note = { ...storedNote(existing)!, text, updatedAt: Date.now() };
-      await db.notes.put(updated);
-      index.replace(indexDoc(updated));
+      const updated = await db.transaction("rw", db.notes, async () => {
+        const row = await db.notes.get(id);
+        if (!row) throw new Error(`Note not found: ${id}`);
+        const next: Note = { ...row, text, updatedAt: now() };
+        await db.notes.put(next);
+        return next;
+      });
       remember(updated);
       return updated;
     },
@@ -163,38 +183,26 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     },
 
     async trash(id) {
-      const existing = views.get(id);
-      if (!existing) throw new Error(`Note not found: ${id}`);
-      const trashedAt = now();
-      await db.notes.update(id, { trashedAt });
-      views.set(id, { ...existing, trashedAt });
-      changed();
+      remember(await patch(id, { trashedAt: now() }));
     },
 
     async restore(id) {
-      const existing = views.get(id);
-      if (!existing) throw new Error(`Note not found: ${id}`);
-      await db.notes.update(id, { trashedAt: null });
-      views.set(id, { ...existing, trashedAt: null });
-      changed();
+      remember(await patch(id, { trashedAt: null }));
     },
 
     async emptyTrash() {
-      const ids = [...views.values()]
-        .filter((note) => note.trashedAt !== null)
-        .map((note) => note.id);
-      await db.notes.bulkDelete(ids);
-      for (const id of ids) {
-        index.discard(id);
-        views.delete(id);
-      }
-      changed();
+      const ids = await db.transaction("rw", db.notes, async () => {
+        const trashedKeys = await db.notes.where("trashedAt").above(-Infinity).primaryKeys();
+        await db.notes.bulkDelete(trashedKeys);
+        return trashedKeys;
+      });
+      for (const id of ids) forget(id);
     },
 
     async listTrash() {
-      return [...views.values()]
-        .filter((note) => note.trashedAt !== null)
-        .sort((a, b) => b.trashedAt! - a.trashedAt! || (a.id < b.id ? 1 : -1));
+      return trashedNotes().sort(
+        (a, b) => b.trashedAt! - a.trashedAt! || (a.id < b.id ? 1 : -1),
+      );
     },
 
     async listTags() {
@@ -217,7 +225,7 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 
     async exportReminderDue() {
       const lastExportAt = await settings.getLastExportAt();
-      if (lastExportAt !== null && now() - lastExportAt < EXPORT_REMINDER_MS) return false;
+      if (lastExportAt !== null && now() - lastExportAt < EXPORT_REMINDER_AFTER_30_DAYS_MS) return false;
       return liveNotes().length > 0;
     },
 
@@ -228,17 +236,18 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         text === ""
           ? liveNotes()
           : index
-              .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 } })
+              .search(text, { prefix: true, fuzzy: 0.2, boost: { title: 3 }, combineWith: "AND" })
               .map((hit) => views.get(hit.id)!);
       return candidates.filter(
-        (note) =>
-          note.trashedAt === null && wanted.every((tag) => note.tags.includes(tag)),
+        (note) => isLive(note) && wanted.every((tag) => note.tags.includes(tag)),
       );
     },
 
     async exportBundle() {
+      const rows = await db.notes.toArray();
+      syncCache(rows);
       const entries: Zippable = {};
-      for (const note of liveNotes()) {
+      for (const note of rows.filter(isLive)) {
         entries[`${note.id}.txt`] = [
           strToU8(note.text),
           {
@@ -255,50 +264,71 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     async importBundle(zip) {
       const summary: ImportSummary = { added: 0, updated: 0, skipped: 0 };
       const times = readEntryTimes(zip);
-      // Decide against the in-memory Notes, then write everything in one batch.
-      const writes = new Map<string, Note>();
-      for (const [name, bytes] of Object.entries(unzipSync(zip))) {
+      const entries = Object.entries(unzipSync(zip)).map(([name, bytes]) => {
         const entry = times.get(name);
         const seconds =
           entry?.utcSeconds ?? (entry ? Math.floor(entry.dos.getTime() / 1000) : undefined);
-        const mtime = seconds === undefined ? Date.now() : seconds * 1000;
         const named = ID_FILENAME.exec(name)?.[1]?.toLowerCase();
-        const id = named ?? uuidv7();
-        const existing = named ? (writes.get(id) ?? storedNote(views.get(id))) : undefined;
-        if (!existing) {
-          writes.set(id, {
-            id,
-            text: strFromU8(bytes),
-            createdAt: mtime,
-            updatedAt: mtime,
-            trashedAt: null,
-          });
-          summary.added++;
-        } else if (Math.floor(existing.updatedAt / 1000) < mtime / 1000) {
-          writes.set(id, { ...existing, text: strFromU8(bytes), updatedAt: mtime });
-          summary.updated++;
-        } else {
-          summary.skipped++;
+        return { name, bytes, named, mtime: seconds === undefined ? now() : seconds * 1000 };
+      });
+      // Decide against the stored rows, in the same transaction as the write.
+      const notes = await db.transaction("rw", db.notes, async () => {
+        const named = entries.flatMap((e) => (e.named ? [e.named] : []));
+        const known = new Map<string, Note>();
+        for (const row of await db.notes.bulkGet(named)) if (row) known.set(row.id, row);
+        const writes = new Map<string, Note>();
+        for (const { name, bytes, named: namedId, mtime } of entries) {
+          if (!isNoteEntry(name)) {
+            summary.skipped++;
+            continue;
+          }
+          const id = namedId ?? uuidv7();
+          const existing = namedId ? (writes.get(id) ?? known.get(id)) : undefined;
+          if (!existing) {
+            writes.set(id, newNote(id, strFromU8(bytes), mtime));
+            summary.added++;
+          } else if (Math.floor(existing.updatedAt / 1000) < mtime / 1000) {
+            writes.set(id, { ...existing, text: strFromU8(bytes), updatedAt: mtime });
+            summary.updated++;
+          } else {
+            summary.skipped++;
+          }
         }
-      }
-      if (writes.size > 0) {
-        const notes = [...writes.values()];
-        await db.notes.bulkPut(notes);
-        for (const note of notes) {
-          if (views.has(note.id)) index.replace(indexDoc(note));
-          else index.add(indexDoc(note));
-          views.set(note.id, toView(note));
-        }
-        changed();
-      }
+        await db.notes.bulkPut([...writes.values()]);
+        return [...writes.values()];
+      });
+      for (const note of notes) remember(note);
       return summary;
     },
   };
+
+  /** Make the cache match rows just read in full: add, replace and drop as needed. */
+  function syncCache(rows: Note[]) {
+    const seen = new Set<string>();
+    for (const row of rows) {
+      seen.add(row.id);
+      const cached = views.get(row.id);
+      if (
+        !cached ||
+        cached.text !== row.text ||
+        cached.updatedAt !== row.updatedAt ||
+        cached.trashedAt !== row.trashedAt
+      ) {
+        remember(row);
+      }
+    }
+    for (const id of [...views.keys()]) if (!seen.has(id)) forget(id);
+  }
 }
 
 const TAG_PATTERN = /(?<=^|\s)#([a-z][a-z0-9-]*)/gim;
 
 const ID_FILENAME = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.txt$/i;
+
+/** Only `.txt` files are Notes; directories, other files and macOS `__MACOSX/` debris are not. */
+function isNoteEntry(name: string): boolean {
+  return /\.txt$/i.test(name) && !name.startsWith("__MACOSX/");
+}
 
 /** Info-ZIP "UT" payload: flags (mtime present) + int32 LE unix seconds. */
 function extendedTimestamp(ms: number): Uint8Array {
@@ -308,15 +338,23 @@ function extendedTimestamp(ms: number): Uint8Array {
   return bytes;
 }
 
-function storedNote(view: NoteView | undefined): Note | undefined {
-  if (!view) return undefined;
-  const { title: _title, tags: _tags, ...note } = view;
-  return note;
+const isLive = (note: Note) => note.trashedAt === null;
+const isTrashed = (note: Note) => note.trashedAt !== null;
+
+function newNote(id: string, text: string, at: number): Note {
+  return { id, text, createdAt: at, updatedAt: at, trashedAt: null };
 }
 
 function deriveTitle(text: string): string {
   const firstLine = text.split(/\r?\n/).find((line) => line.trim() !== "");
   return firstLine?.trim() ?? "Untitled";
+}
+
+/** Everything after the Title line. */
+function deriveBody(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const first = lines.findIndex((line) => line.trim() !== "");
+  return first === -1 ? "" : lines.slice(first + 1).join("\n");
 }
 
 function deriveTags(text: string): string[] {
