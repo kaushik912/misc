@@ -47,3 +47,23 @@ describe("restore(id)", () => {
     expect(await notes.listTrash()).toEqual([]);
   });
 });
+
+describe("emptyTrash()", () => {
+  it("permanently deletes trashed Notes only, including across reopen and search", async () => {
+    const dbName = freshDb();
+    const notes = await openNotes({ dbName });
+    await notes.create("Keeper\nbudget");
+    const gone = await notes.create("Goner\nbudget");
+    await notes.trash(gone.id);
+    await notes.emptyTrash();
+
+    expect(await notes.listTrash()).toEqual([]);
+    expect(titles(await notes.list())).toEqual(["Keeper"]);
+    expect(titles(await notes.search("budget"))).toEqual(["Keeper"]);
+    await expect(notes.restore(gone.id)).rejects.toThrow();
+
+    const reopened = await openNotes({ dbName });
+    expect(await reopened.listTrash()).toEqual([]);
+    expect(titles(await reopened.search("goner"))).toEqual([]);
+  });
+});

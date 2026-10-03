@@ -31,6 +31,8 @@ export interface Notes {
   trash(id: string): Promise<void>;
   /** Return a trashed Note to the list, Tags and search. */
   restore(id: string): Promise<void>;
+  /** Permanently delete every trashed Note. */
+  emptyTrash(): Promise<void>;
   /** Trashed Notes, most recently trashed first. */
   listTrash(): Promise<NoteView[]>;
   /** Tags in use by live Notes with Note counts: most used first, then alphabetical. */
@@ -132,6 +134,14 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     async restore(id) {
       const updated = await db.notes.update(id, { trashedAt: null });
       if (!updated) throw new Error(`Note not found: ${id}`);
+    },
+
+    async emptyTrash() {
+      const ids = await db.notes
+        .filter((note) => note.trashedAt !== null)
+        .primaryKeys();
+      await db.notes.bulkDelete(ids);
+      for (const id of ids) index.discard(id);
     },
 
     async listTrash() {
