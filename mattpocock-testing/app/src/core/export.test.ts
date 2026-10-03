@@ -1,7 +1,7 @@
 import { unzipSync, strFromU8 } from "fflate";
 import { describe, expect, it } from "vitest";
 import { openNotes } from "./index";
-import { readEntryTimes } from "./zipTimes";
+import { readEntryTimes } from "./zipEntryTimes";
 
 let n = 0;
 const freshDb = () => `export-test-${++n}`;
