@@ -4,10 +4,10 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Two-pane layout: list left, editor right
-- [ ] Edits persist without a save action, debounced
-- [ ] updatedAt changes on edit and the list re-sorts by updatedAt descending
-- [ ] Title in the list updates as the first line changes
-- [ ] Core tests cover update and ordering
+- [x] Two-pane layout: list left, editor right
+- [x] Edits persist without a save action, debounced
+- [x] updatedAt changes on edit and the list re-sorts by updatedAt descending
+- [x] Title in the list updates as the first line changes
+- [x] Core tests cover update and ordering
