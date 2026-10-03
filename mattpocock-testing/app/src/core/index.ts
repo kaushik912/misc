@@ -78,7 +78,6 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         entries[`${note.id}.txt`] = [
           strToU8(note.text),
           {
-            level: 0,
             mtime: note.updatedAt,
             extra: { 0x5455: extendedTimestamp(note.updatedAt) },
           },
