@@ -159,7 +159,7 @@ export function App() {
             }}
           />
         </label>
-        <div role="status">
+        <div role="status" aria-label="Import summary">
           {importSummary &&
             `Imported: ${importSummary.added} added, ${importSummary.updated} updated, ${importSummary.skipped} skipped`}
           {importError}
