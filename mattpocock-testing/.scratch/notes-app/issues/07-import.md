@@ -4,10 +4,10 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Newer-wins and older-skipped rules by id and mtime
-- [ ] Non-id filenames become new Notes
-- [ ] Summary shows added, updated and skipped counts
-- [ ] Playwright flow: export then import
-- [ ] Core tests cover importBundle(zip) collision rules
+- [x] Newer-wins and older-skipped rules by id and mtime
+- [x] Non-id filenames become new Notes
+- [x] Summary shows added, updated and skipped counts
+- [x] Playwright flow: export then import
+- [x] Core tests cover importBundle(zip) collision rules
