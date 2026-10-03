@@ -4,8 +4,8 @@
 
 **Blocked by:** 04, 05
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Documented timings for list, search and save at 10k Notes
-- [ ] No visible lag in the UI at 10k Notes
-- [ ] Any fix is covered by a core test
+- [x] Documented timings for list, search and save at 10k Notes
+- [x] No visible lag in the UI at 10k Notes
+- [x] Any fix is covered by a core test
