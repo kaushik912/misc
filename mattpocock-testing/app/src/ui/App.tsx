@@ -3,6 +3,8 @@ import "./app.css";
 import { openNotes, type ImportSummary, type Notes, type NoteView, type TagCount } from "../core";
 
 const AUTOSAVE_DELAY_MS = 400;
+/** Rows rendered at a time: keeps the DOM small at 10k Notes. Search or a Tag narrows further. */
+const PAGE_SIZE = 200;
 
 /** Memoised so a refresh re-renders only Notes that changed, not all 10k rows. */
 const NoteRow = memo(function NoteRow({
@@ -42,6 +44,7 @@ export function App() {
   const [tags, setTags] = useState<TagCount[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [reminderDue, setReminderDue] = useState(false);
+  const [shown, setShown] = useState(PAGE_SIZE);
   const [query, setQuery] = useState("");
   const queryRef = useRef("");
   const [showTrash, setShowTrash] = useState(false);
@@ -53,8 +56,11 @@ export function App() {
 
   const refreshList = useCallback(async (store: Notes, tag: string | null) => {
     const q = queryRef.current.trim();
-    if (q) setList(await store.search(q));
-    else setList(tag ? await store.notesByTag(tag) : await store.list());
+    // The sidebar Tag narrows search results too: both filters compose.
+    if (q) {
+      const hits = await store.search(q);
+      setList(tag ? hits.filter((note) => note.tags.includes(tag)) : hits);
+    } else setList(tag ? await store.notesByTag(tag) : await store.list());
   }, []);
 
   const refresh = useCallback(
@@ -91,12 +97,14 @@ export function App() {
     if (!notes) return;
     await flush();
     setTagsOpen(false);
+    setShown(PAGE_SIZE);
     setActiveTag(tag);
     await refresh(notes, tag);
   }
 
   async function onSearch(value: string) {
     setQuery(value);
+    setShown(PAGE_SIZE);
     queryRef.current = value;
     // Typing only changes the list; Tags, Trash and the reminder are unaffected.
     if (notes) await refreshList(notes, activeTag);
@@ -293,7 +301,7 @@ export function App() {
           {importError}
         </div>
         <ul aria-label="Notes">
-          {list.map((note) => (
+          {list.slice(0, shown).map((note) => (
             <NoteRow
               key={note.id}
               note={note}
@@ -302,6 +310,11 @@ export function App() {
             />
           ))}
         </ul>
+        {list.length > shown && (
+          <button onClick={() => setShown((n) => n + PAGE_SIZE)}>
+            Show more notes ({list.length - shown} more)
+          </button>
+        )}
       </section>
       <section className="editor">
         {selectedId ? (

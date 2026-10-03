@@ -2,9 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 
 const COUNT = 10_000;
 
-/** Seed IndexedDB (Dexie's "notes" database) directly, then reload so the app opens the 10k Notes. */
+/**
+ * Seed IndexedDB (Dexie's "notes" database) directly, then reload so the app opens the 10k Notes.
+ *
+ * Schema coupling: this writes rows straight into the object store the app's core creates
+ * (database "notes", store "notes", rows shaped like core's `Note`: id, text, createdAt, updatedAt,
+ * trashedAt). If the core schema or row shape changes, update this seed. It is deliberately not
+ * done through the UI or Export bundle because typing or importing 10k Notes would dominate the run.
+ */
 async function seed(page: Page) {
-  await page.goto("/");
+  await page.goto("./");
   await expect(page.getByRole("button", { name: "New note" })).toBeEnabled();
   await page.evaluate(async (count) => {
     const words = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu budget garden meeting".split(" ");
@@ -56,6 +63,11 @@ test(`the UI stays responsive at ${COUNT} Notes`, async ({ page }) => {
       await expect(items.first()).toBeVisible({ timeout: 60_000 });
     }),
   ).toBeLessThan(30_000);
+
+  // The list renders a page of rows at a time, not all 10k.
+  await expect(items).toHaveCount(200);
+  await page.getByRole("button", { name: /Show more notes \(9800 more\)/ }).click();
+  await expect(items).toHaveCount(400);
 
   expect(
     await time("search: type 'quokka' (6 keystrokes) until results settle", async () => {
