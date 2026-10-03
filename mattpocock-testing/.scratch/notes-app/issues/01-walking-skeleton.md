@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Creating a Note persists it (UUIDv7 id, createdAt, updatedAt, trashedAt null) and it survives reload
-- [ ] List shows Notes with derived Title; empty Note shows "Untitled"
-- [ ] Core tests (Vitest, fake-indexeddb) drive the public interface, TDD, no mocks of internals
-- [ ] CI runs the unit tests green
+- [x] Creating a Note persists it (UUIDv7 id, createdAt, updatedAt, trashedAt null) and it survives reload
+- [x] List shows Notes with derived Title; empty Note shows "Untitled"
+- [x] Core tests (Vitest, fake-indexeddb) drive the public interface, TDD, no mocks of internals
+- [x] CI runs the unit tests green
