@@ -70,6 +70,25 @@ describe("importBundle()", () => {
     });
   });
 
+  describe("entries that are not Notes", () => {
+    it("skips directory entries and non-.txt files, importing only .txt", async () => {
+      const zip = zipSync({
+        "folder/": new Uint8Array(),
+        "readme.md": strToU8("# not a note"),
+        "photo.png": new Uint8Array([1, 2, 3]),
+        "__MACOSX/": new Uint8Array(),
+        "__MACOSX/._keep.txt": new Uint8Array([0, 5, 22]),
+        "keep.txt": strToU8("Keep me"),
+      });
+      const notes = await openNotes({ dbName: freshDb() });
+
+      const result = await notes.importBundle(zip);
+
+      expect(result).toEqual({ added: 1, updated: 0, skipped: 5 });
+      expect((await notes.list()).map((x) => x.text)).toEqual(["Keep me"]);
+    });
+  });
+
   describe("collisions on the same id", () => {
     async function twoDevices() {
       vi.useFakeTimers({ toFake: ["Date"] });
@@ -112,6 +131,22 @@ describe("importBundle()", () => {
 
       expect(result).toEqual({ added: 0, updated: 0, skipped: 1 });
       expect(await textOf(b, id)).toBe("newer local");
+    });
+
+    it("overwrites the text of a trashed Note but keeps it in the Trash", async () => {
+      const { a, b, id } = await twoDevices();
+      at(1);
+      await b.trash(id);
+      at(5);
+      await a.update(id, "v2");
+
+      const result = await b.importBundle(await a.exportBundle());
+
+      expect(result).toEqual({ added: 0, updated: 1, skipped: 0 });
+      expect(await b.list()).toEqual([]);
+      const [trashed] = await b.listTrash();
+      expect(trashed!.text).toBe("v2");
+      expect(trashed!.trashedAt).toBe(T0 + 1000);
     });
 
     it("treats sub-second differences as equal (bundle time is whole seconds)", async () => {

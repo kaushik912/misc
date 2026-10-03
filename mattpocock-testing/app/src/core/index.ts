@@ -55,8 +55,10 @@ export interface Notes {
   /**
    * Import an Export bundle. For `<id>.txt` entries: an unknown id is added
    * with that id; a known id is overwritten when the entry time is strictly
-   * newer than the stored updatedAt, otherwise skipped. Any other entry name
-   * becomes a new Note with a fresh id.
+   * newer than the stored updatedAt, otherwise skipped. Any other `.txt` entry
+   * becomes a new Note with a fresh id. Directory entries and non-`.txt` files
+   * are ignored and counted as skipped. Overwriting a trashed Note replaces its
+   * text and updatedAt only: it stays in the Trash (trashedAt is preserved).
    */
   importBundle(zip: Uint8Array): Promise<ImportSummary>;
   /**
@@ -259,6 +261,10 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
       // Decide against the in-memory Notes, then write everything in one batch.
       const writes = new Map<string, Note>();
       for (const [name, bytes] of Object.entries(unzipSync(zip))) {
+        if (!isNoteEntry(name)) {
+          summary.skipped++;
+          continue;
+        }
         const entry = times.get(name);
         const seconds =
           entry?.utcSeconds ?? (entry ? Math.floor(entry.dos.getTime() / 1000) : undefined);
@@ -300,6 +306,11 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
 const TAG_PATTERN = /(?<=^|\s)#([a-z][a-z0-9-]*)/gim;
 
 const ID_FILENAME = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.txt$/i;
+
+/** Only `.txt` files are Notes; directories, other files and macOS `__MACOSX/` debris are not. */
+function isNoteEntry(name: string): boolean {
+  return /\.txt$/i.test(name) && !name.startsWith("__MACOSX/");
+}
 
 /** Info-ZIP "UT" payload: flags (mtime present) + int32 LE unix seconds. */
 function extendedTimestamp(ms: number): Uint8Array {
