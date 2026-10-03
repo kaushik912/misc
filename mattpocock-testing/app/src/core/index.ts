@@ -25,8 +25,12 @@ export interface Notes {
   create(text: string): Promise<Note>;
   /** Replace a Note's text and bump updatedAt. */
   update(id: string, text: string): Promise<Note>;
-  /** Newest updatedAt first. */
+  /** Live Notes, newest updatedAt first. */
   list(): Promise<NoteView[]>;
+  /** Move a Note to Trash (sets trashedAt). */
+  trash(id: string): Promise<void>;
+  /** Trashed Notes, most recently trashed first. */
+  listTrash(): Promise<NoteView[]>;
   /** Tags in use by live Notes with Note counts: most used first, then alphabetical. */
   listTags(): Promise<TagCount[]>;
   /** Live Notes using the Tag (case-insensitive), newest updatedAt first. */
@@ -115,7 +119,18 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
     },
 
     async list() {
-      return readAll();
+      return (await readAll()).filter((note) => note.trashedAt === null);
+    },
+
+    async trash(id) {
+      const updated = await db.notes.update(id, { trashedAt: now() });
+      if (!updated) throw new Error(`Note not found: ${id}`);
+    },
+
+    async listTrash() {
+      return (await readAll())
+        .filter((note) => note.trashedAt !== null)
+        .sort((a, b) => b.trashedAt! - a.trashedAt!);
     },
 
     async listTags() {
