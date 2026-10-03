@@ -9,11 +9,11 @@ A single plain-text document, with no formatting syntax. The unit of creation, s
 _Avoid_: Memo, document, entry, page
 
 **Title**:
-The first line of a Note, derived at read time. It is not a separate field.
+The first non-blank line of a Note, trimmed, derived at read time. It is not a separate field. An empty Note is shown as "Untitled".
 _Avoid_: Name, heading, subject
 
 **Tag**:
-A flat label written inline as `#tag` in a Note's body. The set of a Note's Tags is re-derived from its body on every save.
+A flat, case-insensitive label written inline as `#tag` in a Note's body: `#`, then a letter, then letters, digits or `-`, preceded by whitespace or line start. `#123` and `page#section` are not Tags. A Tag exists only while some Note uses it.
 _Avoid_: Label, category, folder, hashtag
 
 **Trash**:
