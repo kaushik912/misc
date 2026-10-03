@@ -202,16 +202,20 @@ export async function openNotes(options: OpenNotesOptions = {}): Promise<Notes> 
         const id = named ?? uuidv7();
         const existing = named ? await db.notes.get(id) : undefined;
         if (!existing) {
-          await db.notes.add({
+          const note: Note = {
             id,
             text: strFromU8(bytes),
             createdAt: mtime,
             updatedAt: mtime,
             trashedAt: null,
-          });
+          };
+          await db.notes.add(note);
+          index.add(indexDoc(note));
           summary.added++;
         } else if (Math.floor(existing.updatedAt / 1000) < mtime / 1000) {
-          await db.notes.put({ ...existing, text: strFromU8(bytes), updatedAt: mtime });
+          const updated: Note = { ...existing, text: strFromU8(bytes), updatedAt: mtime };
+          await db.notes.put(updated);
+          index.replace(indexDoc(updated));
           summary.updated++;
         } else {
           summary.skipped++;
