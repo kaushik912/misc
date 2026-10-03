@@ -4,9 +4,9 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Service worker caches the app shell; app loads and works offline
-- [ ] Install prompt offered
-- [ ] navigator.storage.persist() requested
-- [ ] Verified with a Playwright offline check
+- [x] Service worker caches the app shell; app loads and works offline
+- [x] Install prompt offered
+- [x] navigator.storage.persist() requested
+- [x] Verified with a Playwright offline check
