@@ -13,4 +13,11 @@ describe("search(query)", () => {
     await notes.create("Ideas\nwrite a novel");
     expect(titles(await notes.search("milk"))).toEqual(["Groceries"]);
   });
+
+  it("matches word prefixes", async () => {
+    const notes = await openNotes({ dbName: freshDb() });
+    await notes.create("Groceries\nbuy oat milk");
+    await notes.create("Ideas\nwrite a novel");
+    expect(titles(await notes.search("groc"))).toEqual(["Groceries"]);
+  });
 });
