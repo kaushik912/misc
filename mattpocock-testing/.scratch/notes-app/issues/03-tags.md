@@ -4,10 +4,10 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Tag rule per GLOSSARY: # then a letter then letters, digits or -, preceded by whitespace or line start; case-insensitive, stored lowercase
-- [ ] #123 and page#section are not Tags
-- [ ] Sidebar lists Tags with counts; clicking filters the list
-- [ ] A Tag with no remaining Notes is no longer listed
-- [ ] Core tests cover derivation edge cases and listTags/notesByTag
+- [x] Tag rule per GLOSSARY: # then a letter then letters, digits or -, preceded by whitespace or line start; case-insensitive, stored lowercase
+- [x] #123 and page#section are not Tags
+- [x] Sidebar lists Tags with counts; clicking filters the list
+- [x] A Tag with no remaining Notes is no longer listed
+- [x] Core tests cover derivation edge cases and listTags/notesByTag
