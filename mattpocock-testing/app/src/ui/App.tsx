@@ -97,6 +97,8 @@ export function App() {
     if (!notes) return;
     await flush();
     setTagsOpen(false);
+    setShowTrash(false);
+    setConfirmingEmpty(false);
     setShown(PAGE_SIZE);
     setActiveTag(tag);
     await refresh(notes, tag);
