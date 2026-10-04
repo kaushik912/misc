@@ -36,3 +36,18 @@ test("Empty Trash asks for confirmation", async ({ page }) => {
   await page.getByRole("button", { name: "Confirm empty Trash", exact: true }).click();
   await expect(page.getByRole("list", { name: "Trashed notes" })).not.toContainText("Temporary");
 });
+
+test.describe("narrow viewport", () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  test("choosing All notes from the Tags menu leaves the Trash view", async ({ page }) => {
+    await page.goto("./");
+    await page.getByRole("button", { name: "Tags menu" }).click();
+    await page.getByRole("button", { name: /^Trash/ }).click();
+    await expect(page.getByRole("region", { name: "Trash" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Tags menu" }).click();
+    await page.getByRole("button", { name: "All notes" }).click();
+    await expect(page.getByRole("region", { name: "Trash" })).toHaveCount(0);
+  });
+});
