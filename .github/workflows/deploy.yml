@@ -1,0 +1,68 @@
+name: Deploy
+
+# Deploys the notes app to GitHub Pages (served under /<repo>/, i.e. /misc/).
+# One-time setup: repo Settings > Pages > Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  NOTES_BASE: /${{ github.event.repository.name }}/
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mattpocock-testing/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mattpocock-testing/app/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      # Builds and serves the production bundle under NOTES_BASE, then checks
+      # it loads, registers the service worker and works offline.
+      - name: E2E (PWA under the Pages subpath)
+        run: npx playwright test pwa
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: mattpocock-testing/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mattpocock-testing/app/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: mattpocock-testing/app/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
