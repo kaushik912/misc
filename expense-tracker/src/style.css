@@ -307,3 +307,11 @@ tbody tr td:last-child {
   vertical-align: middle;
   margin-left: 4px;
 }
+
+/* View toggle (Expenses / Card Payments) */
+.view-tabs { display: flex; gap: 8px; margin: 8px 0; }
+.view-tabs button { flex: 1; margin: 0; padding: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+.view-tabs button:hover { background: var(--card); border-color: var(--accent); }
+.view-tabs button.active,
+.view-tabs button.active:hover { background: var(--accent); border-color: var(--accent); color: white; }
+.card-totals h4 { color: var(--accent); }

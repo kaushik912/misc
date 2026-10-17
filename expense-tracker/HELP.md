@@ -70,8 +70,8 @@ Only needed once per Firebase project (already done for
 - **Build → Firestore Database** → create a `default` database.
   - Create composite indexes as Firestore/Chrome console prompts for them
     (the `uid` + `date` range query in `useExpenses.js` needs one).
-  - Rules: `firestore_general.rules` (permissive/shared) vs
-    `firestore_private.rules` (restrictive, per-user `uid` scoping).
+  - Rules: `firestore_general.rules` (per-user `uid` scoping; covers `expenses`
+    and `cardPayments`). Paste into the console Rules tab.
   - Inspect data in the **Data** tab; `uid` on each expense doc is the
     logged-in user's Firebase Auth uid.
 - CLI: `npm install -g firebase-tools`, `firebase login`, then this repo's

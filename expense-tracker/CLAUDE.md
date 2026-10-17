@@ -68,7 +68,7 @@ Already configured for `expenses-tracker-3352f` project (see `.firebaserc`). To 
 1. Update `firebaserc` with new project ID
 2. Fill in `src/firebase.js` config (get from Firebase Console)
 3. Create Firestore database with composite index on `uid + date` for the range query in `useExpenses.js`
-4. Apply Firestore rules: `firestore_general.rules` (permissive) or `firestore_private.rules` (per-user)
+4. Apply Firestore rules from `firestore_general.rules` (paste into console; covers `expenses` and `cardPayments`)
 
 Free-tier limits: 50K reads/day, 20K writes/day, 10K Auth verifications/month, 1GB storage / 10GB transfer.
 
