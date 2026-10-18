@@ -15,7 +15,7 @@ import StatusToast from "./components/StatusToast.vue";
 
 const { user, authError, login, logout } = useAuth();
 const {
-  expenses, monthLabel, total, isLoading,
+  expenses, monthLabel, total, isLoading, loadError,
   loadMockExpenses, initMonth, prevMonth, nextMonth, saveExpense, deleteExpense,
 } = useExpenses(user);
 
@@ -49,6 +49,12 @@ async function withToast(work, { pending, success, failure }) {
   } catch (err) {
     showToast("error", `${failure}: ${err.message}`);
   }
+}
+
+for (const [name, src] of [["expenses", { loadError }], ["card payments", payments]]) {
+  watch(src.loadError, (msg) => {
+    if (msg) showToast("error", `Failed to load ${name}: ${msg}`);
+  });
 }
 
 const loggedIn = computed(() => testMode || !!user.value);
