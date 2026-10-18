@@ -11,6 +11,7 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
   const expenses = ref([]);
   const currentMonth = ref(null); // { year, month }
   const isLoading = ref(false);
+  const loadError = ref(null); // message of the last failed month load, else null
   const monthCache = new Map(); // "year-month" -> expenses array
 
   const monthLabel = computed(() =>
@@ -53,6 +54,7 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     const endDate = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
 
     isLoading.value = true;
+    loadError.value = null;
     try {
       const snapshot = await db.collection(collection)
         .where("uid", "==", user.uid)
@@ -64,6 +66,10 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
       const result = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       monthCache.set(cacheKey, result);
       expenses.value = result;
+    } catch (err) {
+      // Don't leave the previous month's rows on screen under the wrong label.
+      expenses.value = [];
+      loadError.value = err.message;
     } finally {
       isLoading.value = false;
     }
@@ -149,6 +155,7 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     monthLabel,
     total,
     isLoading,
+    loadError,
     loadMockExpenses,
     initMonth,
     prevMonth,
