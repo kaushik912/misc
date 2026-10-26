@@ -3,7 +3,7 @@ import "firebase/compat/auth";
 import "firebase/compat/firestore";
 
 const firebaseConfig = {
-  apiKey: "<api-key>",
+  apiKey: "AIzaSyCwuecN31ufhSUQTx1MSgM9YJNfQP2He4w",
   authDomain: "expenses-tracker-3352f.firebaseapp.com",
   projectId: "expenses-tracker-3352f",
   storageBucket: "expenses-tracker-3352f.firebasestorage.app",

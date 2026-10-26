@@ -62,6 +62,12 @@ public/                    # static assets + mock_expenses.json
 dist/                      # Vite build output (gitignored)
 ```
 
+## Expense Fields
+
+`uid`, `date` (YYYY-MM-DD), `amount`, `category`, `notes` (optional). Categories are presets in `src/categories.js` plus "Custom…" (free text); legacy docs without a category display as "Uncategorized" (read-time default, no migration).
+
+The Expenses view has a client-side category filter (App.vue): grouped case-insensitively via `categoryKey`, shows that category's total and % of the month total, persists across month changes. No extra Firestore reads.
+
 ## Firebase Setup
 
 Already configured for `expenses-tracker-3352f` project (see `.firebaserc`). To use a different project:
