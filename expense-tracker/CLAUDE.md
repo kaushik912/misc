@@ -66,6 +66,8 @@ dist/                      # Vite build output (gitignored)
 
 `uid`, `date` (YYYY-MM-DD), `amount`, `category`, `notes` (optional). Categories are presets in `src/categories.js` plus "Custom…" (free text); legacy docs without a category display as "Uncategorized" (read-time default, no migration).
 
+Custom categories are auto-saved on expense save to `userCategories/{uid}` (`{ uid, names: [] }`, via `useCategories()`; one read at login, write only when new, deduped case-insensitively vs presets + saved) and appear in the ExpenseModal dropdown after the presets. No manage/delete UI; old expenses keep their string. Rules deploy needed (`firebase deploy --only firestore:rules` or full deploy). Not loaded in testMode.
+
 The Expenses view has a client-side category filter (App.vue): grouped case-insensitively via `categoryKey`, shows that category's total and % of the month total, persists across month changes. No extra Firestore reads.
 
 ## Firebase Setup
