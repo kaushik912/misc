@@ -3,6 +3,7 @@ import { ref, computed, watch } from "vue";
 import { testMode } from "./firebase";
 import { useAuth } from "./composables/useAuth";
 import { useExpenses } from "./composables/useExpenses";
+import { categoryKey, DEFAULT_CATEGORY } from "./categories";
 import LoginForm from "./components/LoginForm.vue";
 import UserControls from "./components/UserControls.vue";
 import MonthNav from "./components/MonthNav.vue";
@@ -12,6 +13,10 @@ import CardPaymentModal from "./components/CardPaymentModal.vue";
 import ExpenseModal from "./components/ExpenseModal.vue";
 import PasswordModal from "./components/PasswordModal.vue";
 import StatusToast from "./components/StatusToast.vue";
+import MigrateCategories from "./components/MigrateCategories.vue";
+
+// TEMP: one-off category migration, opened via ?migrate=1 (remove with MigrateCategories.vue).
+const showMigrate = ref(!testMode && new URLSearchParams(location.search).has("migrate"));
 
 const { user, authError, login, logout } = useAuth();
 const {
@@ -24,6 +29,41 @@ const view = ref("expenses"); // "expenses" | "cards"
 const isCards = computed(() => view.value === "cards");
 const editingPayment = ref(null);
 const cardNames = computed(() => [...new Set(payments.expenses.value.map((p) => p.card))]);
+
+// Category filter: "" = all, else a categoryKey. Persists across month changes.
+const categoryFilter = ref("");
+const filterLabel = ref("");
+
+// One option per category present this month (first-seen casing); keeps the active filter listed even if empty.
+const categoryOptions = computed(() => {
+  const opts = new Map();
+  for (const e of expenses.value) {
+    const key = categoryKey(e.category);
+    if (!opts.has(key)) opts.set(key, (e.category || DEFAULT_CATEGORY).trim());
+  }
+  if (categoryFilter.value && !opts.has(categoryFilter.value)) {
+    opts.set(categoryFilter.value, filterLabel.value);
+  }
+  return [...opts].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
+});
+
+watch(categoryFilter, (key) => {
+  filterLabel.value = categoryOptions.value.find((o) => o.key === key)?.label ?? "";
+});
+
+const visibleExpenses = computed(() =>
+  categoryFilter.value
+    ? expenses.value.filter((e) => categoryKey(e.category) === categoryFilter.value)
+    : expenses.value
+);
+
+const filteredTotal = computed(() =>
+  visibleExpenses.value.reduce((sum, e) => sum + parseFloat(e.amount), 0)
+);
+
+const filteredPercent = computed(() =>
+  total.value ? (filteredTotal.value / total.value) * 100 : 0
+);
 
 const editingExpense = ref(null); // null = closed, {} = add mode, {id,...} = edit mode
 const showPasswordModal = ref(false);
@@ -165,7 +205,20 @@ function openPassword() {
       <div class="totals">
         <h4>Selected Month Total: Rs.<span>{{ total.toFixed(2) }}</span></h4>
       </div>
-      <ExpenseList :expenses="expenses" :is-loading="isLoading" @edit="openEdit" @delete="onDelete" />
+      <div class="category-filter">
+        <label>
+          Category
+          <select v-model="categoryFilter">
+            <option value="">All</option>
+            <option v-for="o in categoryOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
+          </select>
+        </label>
+        <h4 v-if="categoryFilter">
+          {{ filterLabel }} Total: Rs.<span>{{ filteredTotal.toFixed(2) }}</span>
+          ({{ filteredPercent.toFixed(1) }}% of month)
+        </h4>
+      </div>
+      <ExpenseList :expenses="visibleExpenses" :is-loading="isLoading" @edit="openEdit" @delete="onDelete" />
     </template>
 
     <template v-else>
@@ -180,6 +233,7 @@ function openPassword() {
     <CardPaymentModal v-if="editingPayment" :payment="editingPayment" :cards="cardNames"
       @close="editingPayment = null" @save="onSavePayment" />
     <ExpenseModal v-if="editingExpense" :expense="editingExpense" @close="editingExpense = null" @save="onSave" />
+    <MigrateCategories v-if="showMigrate && user" :user="user" @close="showMigrate = false" />
     <PasswordModal v-if="showPasswordModal" @close="showPasswordModal = false" />
     <StatusToast :toast="toast" @close="toast = null" />
   </div>
