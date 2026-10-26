@@ -68,6 +68,8 @@ dist/                      # Vite build output (gitignored)
 
 Custom categories are auto-saved on expense save to `userCategories/{uid}` (`{ uid, names: [] }`, via `useCategories()`; one read at login, write only when new, deduped case-insensitively vs presets + saved) and appear in the ExpenseModal dropdown after the presets. No manage/delete UI; old expenses keep their string. Rules deploy needed (`firebase deploy --only firestore:rules` or full deploy). Not loaded in testMode.
 
+The Expenses view also has a client-side text search (App.vue `searchText`): case-insensitive, all words must match across category, notes, amount and date; ANDs with the category filter, persists across month changes, current month only. The filtered-total header shows for either filter.
+
 The Expenses view has a client-side category filter (App.vue): grouped case-insensitively via `categoryKey`, shows that category's total and % of the month total, persists across month changes. No extra Firestore reads.
 
 ## Firebase Setup

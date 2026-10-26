@@ -50,9 +50,26 @@ watch(categoryFilter, (key) => {
   filterLabel.value = categoryOptions.value.find((o) => o.key === key)?.label ?? "";
 });
 
+// Free-text search over category, notes, amount and date; every word must match. Persists across month changes.
+const searchText = ref("");
+const searchTerms = computed(() => searchText.value.toLowerCase().split(/\s+/).filter(Boolean));
+
+const matchesSearch = (e) => {
+  const haystack = [e.category || DEFAULT_CATEGORY, e.notes, e.amount, e.date].join(" ").toLowerCase();
+  return searchTerms.value.every((t) => haystack.includes(t));
+};
+
+const isFiltering = computed(() => !!categoryFilter.value || searchTerms.value.length > 0);
+
+const filterSummary = computed(() =>
+  [filterLabel.value, searchTerms.value.length ? `"${searchText.value.trim()}"` : ""].filter(Boolean).join(" + ")
+);
+
 const visibleExpenses = computed(() =>
-  categoryFilter.value
-    ? expenses.value.filter((e) => categoryKey(e.category) === categoryFilter.value)
+  isFiltering.value
+    ? expenses.value.filter(
+        (e) => (!categoryFilter.value || categoryKey(e.category) === categoryFilter.value) && matchesSearch(e)
+      )
     : expenses.value
 );
 
@@ -209,14 +226,21 @@ function openPassword() {
       <div class="category-filter">
         <label>
           Category
-          <select v-model="categoryFilter">
-            <option value="">All</option>
-            <option v-for="o in categoryOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
-          </select>
+          <div class="filter-row">
+            <select v-model="categoryFilter">
+              <option value="">All</option>
+              <option v-for="o in categoryOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
+            </select>
+            <button v-if="categoryFilter" type="button" class="reset-btn" @click="categoryFilter = ''">Reset</button>
+          </div>
         </label>
-        <h4 v-if="categoryFilter">
-          {{ filterLabel }} Total: Rs.<span>{{ filteredTotal.toFixed(2) }}</span>
-          ({{ filteredPercent.toFixed(1) }}% of month)
+        <div class="search-box">
+          <input type="text" v-model="searchText" placeholder="Search category, notes, amount, date" />
+          <button v-if="searchText" type="button" class="search-clear" aria-label="Clear search" @click="searchText = ''">×</button>
+        </div>
+        <h4 v-if="isFiltering">
+          {{ filterSummary }} Total: Rs.<span>{{ filteredTotal.toFixed(2) }}</span>
+          ({{ filteredPercent.toFixed(1) }}% of month, {{ visibleExpenses.length }} of {{ expenses.length }} shown)
         </h4>
       </div>
       <ExpenseList :expenses="visibleExpenses" :is-loading="isLoading" @edit="openEdit" @delete="onDelete" />
