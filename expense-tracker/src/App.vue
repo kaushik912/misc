@@ -3,6 +3,7 @@ import { ref, computed, watch } from "vue";
 import { testMode } from "./firebase";
 import { useAuth } from "./composables/useAuth";
 import { useExpenses } from "./composables/useExpenses";
+import { useCategories } from "./composables/useCategories";
 import { categoryKey, DEFAULT_CATEGORY } from "./categories";
 import LoginForm from "./components/LoginForm.vue";
 import UserControls from "./components/UserControls.vue";
@@ -19,6 +20,8 @@ const {
   expenses, monthLabel, total, isLoading, loadError,
   loadMockExpenses, initMonth, prevMonth, nextMonth, saveExpense, deleteExpense,
 } = useExpenses(user);
+
+const { saved: savedCategories, loadCategories, addCategory } = useCategories(user);
 
 const payments = useExpenses(user, "cardPayments", "mock_card_payments.json");
 const view = ref("expenses"); // "expenses" | "cards"
@@ -103,6 +106,7 @@ if (testMode) {
     if (u) {
       initMonth();
       payments.initMonth();
+      loadCategories();
     }
   }, { immediate: true });
 }
@@ -132,6 +136,7 @@ function openEdit(id) {
 
 function onSave(payload) {
   editingExpense.value = null; // close right away; list updates optimistically
+  addCategory(payload.category); // no-op for presets/already saved
   return withToast(() => saveExpense(payload), {
     pending: "Saving expense…",
     success: "Expense saved",
@@ -228,7 +233,7 @@ function openPassword() {
 
     <CardPaymentModal v-if="editingPayment" :payment="editingPayment" :cards="cardNames"
       @close="editingPayment = null" @save="onSavePayment" />
-    <ExpenseModal v-if="editingExpense" :expense="editingExpense" @close="editingExpense = null" @save="onSave" />
+    <ExpenseModal v-if="editingExpense" :expense="editingExpense" :saved-categories="savedCategories" @close="editingExpense = null" @save="onSave" />
     <PasswordModal v-if="showPasswordModal" @close="showPasswordModal = false" />
     <StatusToast :toast="toast" @close="toast = null" />
   </div>

@@ -2,6 +2,7 @@
 export const CATEGORIES = [
   "Fuel", "Rent", "Groceries", "Food & Dining", "Bills & Utilities", "Transport",
   "Health", "Shopping", "Entertainment", "Travel", "Education", "EMI/Loans",
+  "ClubM",
 ];
 
 export const CUSTOM = "Custom…";
