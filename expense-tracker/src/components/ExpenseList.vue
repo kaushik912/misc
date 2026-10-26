@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from "vue";
+import { DEFAULT_CATEGORY } from "../categories";
 
 const props = defineProps({ expenses: Array, isLoading: Boolean });
 defineEmits(["edit", "delete"]);
@@ -34,6 +35,7 @@ function toggleAmountSort() {
         <th>Date</th>
         <th>Amount (Rs.)</th>
         <th>Category</th>
+        <th>Notes</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -41,7 +43,8 @@ function toggleAmountSort() {
       <tr v-for="e in sortedExpenses" :key="e.id">
         <td>{{ e.date }}</td>
         <td>{{ parseFloat(e.amount).toFixed(2) }}</td>
-        <td>{{ e.category }}</td>
+        <td>{{ e.category || DEFAULT_CATEGORY }}</td>
+        <td>{{ e.notes }}</td>
         <td>
           <button class="edit-btn" title="Edit" aria-label="Edit" @click="$emit('edit', e.id)">✏️</button>
           <button class="delete-btn" title="Delete" aria-label="Delete" @click="$emit('delete', e.id)">🗑️</button>
