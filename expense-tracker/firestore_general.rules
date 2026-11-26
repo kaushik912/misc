@@ -1,24 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
+    // Only the owner can touch Firestore. Any other account (e.g. a bot that self-registered
+    // via the Auth REST API) gets nothing.
+    // Owner UID from Firebase console → Authentication → Users → "User UID".
+    function allowed() {
+      return request.auth != null && request.auth.uid == 'sz3Ztdlwr4RRA2RpfkWTPjZoTT93';
+    }
+
     match /expenses/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow read, update, delete: if allowed() && request.auth.uid == resource.data.uid;
+      allow create: if allowed() && request.resource.data.uid == request.auth.uid;
     }
 
     match /cardPayments/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if allowed() && request.auth.uid == resource.data.uid;
+      allow create: if allowed() && request.resource.data.uid == request.auth.uid;
     }
 
     // Saved custom categories: one doc per user, keyed by uid
     match /userCategories/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Allow signed-in users to create new expenses
-    match /expenses/{docId} {
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, write: if allowed() && request.auth.uid == userId;
     }
   }
 }
