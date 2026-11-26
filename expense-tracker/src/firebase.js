@@ -12,9 +12,6 @@ const firebaseConfig = {
   measurementId: "G-K83YZ0TS8R",
 };
 
-// Toggle this to use mock data instead of Firebase
-export const testMode = false;
-
 firebase.initializeApp(firebaseConfig);
 
 export { firebase };

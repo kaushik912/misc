@@ -1,18 +1,19 @@
 import { ref } from "vue";
-import { db, firebase } from "../firebase";
+import { storeFor } from "../stores";
 import { CATEGORIES, categoryKey } from "../categories";
 
 // Saved custom categories, stored as one doc `userCategories/{uid}` -> { names: [...] }.
-// `userRef` is a ref to the current firebase user (or null).
+// `userRef` is a ref to the current user (or null).
 export function useCategories(userRef) {
   const saved = ref([]);
 
   async function loadCategories() {
     const user = userRef.value;
+    saved.value = [];
     if (!user) return;
     try {
-      const snap = await db.collection("userCategories").doc(user.uid).get();
-      saved.value = snap.exists ? snap.data().names ?? [] : [];
+      const doc = await storeFor(user).getDoc("userCategories", user.uid);
+      saved.value = doc?.names ?? [];
     } catch (err) {
       console.error("Failed to load saved categories", err);
     }
@@ -29,10 +30,7 @@ export function useCategories(userRef) {
 
     saved.value = [...saved.value, trimmed];
     try {
-      await db.collection("userCategories").doc(user.uid).set(
-        { uid: user.uid, names: firebase.firestore.FieldValue.arrayUnion(trimmed) },
-        { merge: true }
-      );
+      await storeFor(user).addToArray("userCategories", user.uid, "names", trimmed, { uid: user.uid });
     } catch (err) {
       saved.value = saved.value.filter((n) => n !== trimmed);
       console.error("Failed to save category", err);

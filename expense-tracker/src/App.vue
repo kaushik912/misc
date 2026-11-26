@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch } from "vue";
-import { testMode } from "./firebase";
+import { demoStore } from "./stores";
 import { useAuth } from "./composables/useAuth";
 import { useExpenses } from "./composables/useExpenses";
 import { useCategories } from "./composables/useCategories";
@@ -15,15 +15,15 @@ import ExpenseModal from "./components/ExpenseModal.vue";
 import PasswordModal from "./components/PasswordModal.vue";
 import StatusToast from "./components/StatusToast.vue";
 
-const { user, authError, login, logout } = useAuth();
+const { user, authError, login, logout, enterDemo } = useAuth();
 const {
   expenses, monthLabel, total, isLoading, loadError,
-  loadMockExpenses, initMonth, prevMonth, nextMonth, saveExpense, deleteExpense,
+  initMonth, prevMonth, nextMonth, saveExpense, deleteExpense,
 } = useExpenses(user);
 
 const { saved: savedCategories, loadCategories, addCategory } = useCategories(user);
 
-const payments = useExpenses(user, "cardPayments", "mock_card_payments.json");
+const payments = useExpenses(user, "cardPayments");
 const view = ref("expenses"); // "expenses" | "cards"
 const isCards = computed(() => view.value === "cards");
 const editingPayment = ref(null);
@@ -113,41 +113,32 @@ for (const [name, src] of [["expenses", { loadError }], ["card payments", paymen
   });
 }
 
-const loggedIn = computed(() => testMode || !!user.value);
+const loggedIn = computed(() => !!user.value);
+const isDemo = computed(() => !!user.value?.isDemo);
 
-if (testMode) {
-  loadMockExpenses();
-  payments.loadMockExpenses();
-} else {
-  watch(user, (u) => {
-    if (u) {
-      initMonth();
-      payments.initMonth();
-      loadCategories();
-    }
-  }, { immediate: true });
+function loadAll() {
+  initMonth();
+  payments.initMonth();
+  loadCategories();
+}
+
+watch(user, (u) => { if (u) loadAll(); }, { immediate: true });
+
+async function resetDemo() {
+  if (!confirm("Discard your demo changes and restore the sample data?")) return;
+  await demoStore.reset();
+  loadAll();
 }
 
 // Month nav drives whichever view is active.
 function prev() { (isCards.value ? payments : { prevMonth }).prevMonth(); }
 function next() { (isCards.value ? payments : { nextMonth }).nextMonth(); }
 
-// Blocks an action while in test mode, alerting why. Returns true if blocked.
-function requiresLive(actionLabel) {
-  if (testMode) {
-    alert(`${actionLabel} is disabled in test mode.`);
-    return true;
-  }
-  return false;
-}
-
 function openAdd() {
-  if (requiresLive("Adding expenses")) return;
   editingExpense.value = {};
 }
 
 function openEdit(id) {
-  if (requiresLive("Editing expenses")) return;
   editingExpense.value = expenses.value.find((e) => e.id === id);
 }
 
@@ -162,7 +153,6 @@ function onSave(payload) {
 }
 
 function onDelete(id) {
-  if (requiresLive("Deleting expenses")) return;
   if (!confirm("Are you sure you want to delete this expense?")) return;
   return withToast(() => deleteExpense(id), {
     pending: "Deleting expense…",
@@ -172,12 +162,10 @@ function onDelete(id) {
 }
 
 function openAddPayment() {
-  if (requiresLive("Adding card payments")) return;
   editingPayment.value = {};
 }
 
 function openEditPayment(id) {
-  if (requiresLive("Editing card payments")) return;
   editingPayment.value = payments.expenses.value.find((p) => p.id === id);
 }
 
@@ -191,7 +179,6 @@ function onSavePayment(payload) {
 }
 
 function onDeletePayment(id) {
-  if (requiresLive("Deleting card payments")) return;
   if (!confirm("Are you sure you want to delete this payment?")) return;
   return withToast(() => payments.deleteExpense(id), {
     pending: "Deleting payment…",
@@ -201,17 +188,19 @@ function onDeletePayment(id) {
 }
 
 function openPassword() {
-  if (requiresLive("Password update")) return;
   showPasswordModal.value = true;
 }
 </script>
 
 <template>
-  <LoginForm v-if="!loggedIn" :error="authError" @login="login" />
+  <LoginForm v-if="!loggedIn" :error="authError" @login="login" @demo="enterDemo" />
 
   <div v-else id="appSection">
     <h2>Expense Tracker</h2>
-    <UserControls @logout="logout" @open-password="openPassword" />
+    <p v-if="isDemo" class="demo-banner">
+      Demo mode — sample data, changes stay in this browser only.
+    </p>
+    <UserControls :demo="isDemo" @logout="logout" @open-password="openPassword" @reset-demo="resetDemo" />
     <div class="view-tabs">
       <button :class="{ active: !isCards }" @click="view = 'expenses'">Expenses</button>
       <button :class="{ active: isCards }" @click="view = 'cards'">Card Payments</button>

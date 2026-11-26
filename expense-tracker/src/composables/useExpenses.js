@@ -1,13 +1,14 @@
 import { ref, computed } from "vue";
-import { db } from "../firebase";
+import { storeFor } from "../stores";
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
-// Manages the loaded expense list, the active month filter, and CRUD against Firestore.
-// `userRef` is a ref to the current firebase user (or null).
-// `collection` and `mockFile` let the same logic back other date-keyed lists (e.g. card payments).
-export function useExpenses(userRef, collection = "expenses", mockFile = "mock_expenses.json") {
+// Manages the loaded expense list, the active month filter, and CRUD via the user's store
+// (Firestore for real users, localStorage for the demo user — see src/stores/).
+// `userRef` is a ref to the current user (or null).
+// `collection` lets the same logic back other date-keyed lists (e.g. card payments).
+export function useExpenses(userRef, collection = "expenses") {
   const expenses = ref([]);
   const currentMonth = ref(null); // { year, month }
   const isLoading = ref(false);
@@ -23,18 +24,6 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
   const total = computed(() =>
     expenses.value.reduce((sum, e) => sum + parseFloat(e.amount), 0)
   );
-
-  async function loadMockExpenses() {
-    isLoading.value = true;
-    try {
-      const res = await fetch(mockFile);
-      const data = await res.json();
-      currentMonth.value = { year: 2025, month: 8 };
-      expenses.value = data.map((e, i) => ({ id: `mock-id-${i}`, ...e }));
-    } finally {
-      isLoading.value = false;
-    }
-  }
 
   async function loadExpenses() {
     const user = userRef.value;
@@ -56,14 +45,7 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     isLoading.value = true;
     loadError.value = null;
     try {
-      const snapshot = await db.collection(collection)
-        .where("uid", "==", user.uid)
-        .where("date", ">=", startDate)
-        .where("date", "<", endDate)
-        .orderBy("date", "desc")
-        .get();
-
-      const result = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const result = await storeFor(user).listRange(collection, user.uid, startDate, endDate);
       monthCache.set(cacheKey, result);
       expenses.value = result;
     } catch (err) {
@@ -75,7 +57,10 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     }
   }
 
+  // Called on every login; clears the cache so one user's (or the demo's) data never shows for another.
   function initMonth() {
+    monthCache.clear();
+    expenses.value = [];
     const now = new Date();
     currentMonth.value = { year: now.getFullYear(), month: now.getMonth() + 1 };
     loadExpenses();
@@ -122,16 +107,17 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     const user = userRef.value;
     if (!user) return;
 
+    const store = storeFor(user);
     const previous = expenses.value;
-    const ref = id ? db.collection(collection).doc(id) : db.collection(collection).doc();
+    const docId = id ?? store.newId(collection);
     const { date } = fields;
-    const doc = { id: ref.id, uid: user.uid, ...fields };
-    const rest = previous.filter((e) => e.id !== ref.id);
+    const doc = { id: docId, uid: user.uid, ...fields };
+    const rest = previous.filter((e) => e.id !== docId);
     setLocal(inCurrentMonth(date) ? [...rest, doc] : rest);
 
     try {
-      if (id) await ref.update(fields);
-      else await ref.set({ uid: user.uid, ...fields });
+      if (id) await store.update(collection, docId, fields);
+      else await store.create(collection, docId, { uid: user.uid, ...fields });
     } catch (err) {
       setLocal([...previous]);
       throw err;
@@ -142,7 +128,7 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     const previous = expenses.value;
     setLocal(previous.filter((e) => e.id !== id));
     try {
-      await db.collection(collection).doc(id).delete();
+      await storeFor(userRef.value).remove(collection, id);
     } catch (err) {
       setLocal([...previous]);
       throw err;
@@ -156,7 +142,6 @@ export function useExpenses(userRef, collection = "expenses", mockFile = "mock_e
     total,
     isLoading,
     loadError,
-    loadMockExpenses,
     initMonth,
     prevMonth,
     nextMonth,

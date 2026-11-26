@@ -1,24 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
+    // Only allowlisted accounts can touch Firestore at all. Anyone else who manages to
+    // create a Firebase Auth account (e.g. via the public REST API) gets nothing.
+    // Demo mode never reaches Firestore (it uses localStorage), so it needs no entry here.
+    // TODO before deploying: replace with your UID (Firebase console → Authentication → Users).
+    function allowed() {
+      return request.auth != null && request.auth.uid in ['REPLACE_WITH_YOUR_UID'];
+    }
+
     match /expenses/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow read, update, delete: if allowed() && request.auth.uid == resource.data.uid;
+      allow create: if allowed() && request.resource.data.uid == request.auth.uid;
     }
 
     match /cardPayments/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if allowed() && request.auth.uid == resource.data.uid;
+      allow create: if allowed() && request.resource.data.uid == request.auth.uid;
     }
 
     // Saved custom categories: one doc per user, keyed by uid
     match /userCategories/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Allow signed-in users to create new expenses
-    match /expenses/{docId} {
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, write: if allowed() && request.auth.uid == userId;
     }
   }
 }
